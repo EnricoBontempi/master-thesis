@@ -130,8 +130,10 @@
 			\\
 			Advisor: {\advisor}
 			\\
+			\if@cosupervisorexist
 			Co-advisors: {\coadvisor}
 			\\
+			\fi
 			Academic Year: {\academicyear}
 			}
 			\end{minipage}
