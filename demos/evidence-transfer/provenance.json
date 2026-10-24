@@ -5,5 +5,13 @@
   "source_path": "examples/pptx/figures/left.png",
   "destination": "demos/evidence-transfer/demo.png",
   "sha256": "4bd05c354edbfb8f4b10ec3493edc9fbfbe4be103bbfb6d1ca29085a45504332",
-  "status": "illustrative"
+  "status": "illustrative",
+  "verified_correspondence": {
+    "note": "The existing demo.png bytes match this illustrative package figure. The historical source above was not rewritten and the file was not copied again.",
+    "repository": "EnricoBontempi/thesis-automation",
+    "commit": "51af452253b90441877f4cfeb240bd1ddd37eada",
+    "path": "demos/transport-demo-v1/figures/left.png",
+    "sha256": "4bd05c354edbfb8f4b10ec3493edc9fbfbe4be103bbfb6d1ca29085a45504332",
+    "status": "illustrative"
+  }
 }
