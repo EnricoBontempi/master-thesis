@@ -1,0 +1,9 @@
+{
+  "purpose": "illustrative demo only, not thesis research",
+  "source_repository": "EnricoBontempi/thesis-automation",
+  "source_commit": "eac671afb314254bf9bb88cfc78318cd35b7460f",
+  "source_path": "examples/pptx/figures/left.png",
+  "destination": "demos/evidence-transfer/demo.png",
+  "sha256": "4bd05c354edbfb8f4b10ec3493edc9fbfbe4be103bbfb6d1ca29085a45504332",
+  "status": "illustrative"
+}
