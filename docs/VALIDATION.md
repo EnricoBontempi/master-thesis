@@ -91,3 +91,58 @@ PDF e anteprima, fuori dal repository:
 
 - `/home/enric/.local/state/thesis-latex-collaudo/demo/demo.pdf`
 - `/home/enric/.local/state/thesis-latex-collaudo/demo/page-1.png`
+
+### Template Polimi, secondo tentativo
+
+Dopo l'installazione di `texlive-font-utils` e `ghostscript`, ripetuta soltanto
+la compilazione reale. Strumenti aggiunti: `repstopdf` (epstopdf 2.33) e
+Ghostscript 10.02.1. pdfTeX e Latexmk restano quelli del tentativo precedente.
+Non è stato passato `-shell-escape`: il log riporta `restricted \write18 enabled`.
+Directory nuova, distinta dal tentativo senza PDF:
+
+```bash
+latexmk -pdf -interaction=nonstopmode -halt-on-error \
+  -outdir=/home/enric/.local/state/thesis-latex-collaudo/real-20261024T0528 \
+  Thesis.tex
+```
+
+Esito: PDF prodotto, 32 pagine, 496084 byte, A4, creato il 2026-10-24 01:29 EDT.
+`latexmk` conclude che il bersaglio è aggiornato. Il log finale non contiene
+errori LaTeX, file mancanti, citazioni indefinite o riferimenti indefiniti.
+BibTeX con `abbrvnat.bst` riporta zero warning.
+
+Warning già presenti nel template, non corretti:
+
+- `pdfTeX warning (ext4): destination with the same identifier` per `page.i` e
+  `page.ii`, alle due aperture di capitolo con numerazione romana.
+- `Underfull \hbox (badness 10000)` nei paragrafi degli abstract, `Thesis.tex`
+  righe 140–157 e 160–164.
+
+Controllo visivo di tre pagine del PDF corrente:
+
+- pagina 1, frontespizio: marchio Politecnico di Milano, titolo segnaposto
+  «Title», corso ancora «Xxxxxxx Engineering», autore Enrico Bontempi,
+  Student ID 10838032, advisor Prof. Gianluca D'Errico, anno 2026-2027;
+- pagina 13, capitolo 1 pagina 5: Figure 1.1 e Figure 1.2 con i loghi EPS,
+  riferimenti Figure 1.1, 1.2a e 1.2b risolti, Table 1.1 presente;
+- pagina 19, bibliografia pagina 11: sei voci numerate, da [1] a [6].
+
+Il PDF contiene pagine vuote fra i frontespizi di capitolo. Sono interruzioni
+già previste dal template, non file mancanti di questo run. Titolo e corso
+restano i segnaposto del template: nessun capitolo scientifico è stato scritto.
+
+`repstopdf`, con shell escape ristretto, ha scritto quattro PDF
+`*-eps-converted-to.pdf` accanto agli EPS in `Images/`, non nella directory di
+build. Gli EPS originali non sono stati modificati. I quattro PDF generati
+sono stati spostati in
+`/home/enric/.local/state/thesis-latex-collaudo/real-20261024T0528/eps-converted/`
+e non sono nel commit. Una compilazione successiva li ricreerà in `Images/`
+finché il template non reindirizza l'output; il template non è stato cambiato
+per questo.
+
+PDF e anteprime, fuori dal repository:
+
+- `/home/enric/.local/state/thesis-latex-collaudo/real-20261024T0528/Thesis.pdf`
+- `/home/enric/.local/state/thesis-latex-collaudo/real-20261024T0528/front-01.png`
+- `/home/enric/.local/state/thesis-latex-collaudo/real-20261024T0528/figure-13.png`
+- `/home/enric/.local/state/thesis-latex-collaudo/real-20261024T0528/biblio-19.png`
