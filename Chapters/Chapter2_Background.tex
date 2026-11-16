@@ -1,0 +1,30 @@
+% Chapter 2 — Physical and Methodological Background (Skeleton)
+
+\section{Physics of Swirl-Stabilized Ammonia--Methane Flames}
+\label{sec:bg_combustion}
+% To be expanded: Swirl number, vortex breakdown, Inner and Outer Recirculation Zones (IRZ/ORZ),
+% NH3/CH4 thermochemistry (adiabatic flame temperature T_ad, laminar burning velocity S_L,
+% thermal vs. fuel-NOx pathways, equivalence ratio phi effects), and low-Mach kinematic-thermal coupling.
+
+\section{Classical Sparse Field Reconstruction Methods}
+\label{sec:bg_classical}
+% To be expanded: Proper Orthogonal Decomposition (POD), Sirovich snapshot method,
+% Gappy POD (Everson & Sirovich 1995), MAP / variance-scaled ridge regularization,
+% multi-variable sensor weighting, and local nonlinear regression / Kriging.
+
+\section{Physics-Informed vs.\ Data-Driven Neural Reconstruction in Reacting Flows}
+\label{sec:bg_pinns}
+% To be expanded: Review of RF-PINNs (Yadav, Casel, & Ghani, JCP 2025) for steady/mean flames;
+% detailed analysis of why 2D low-Mach reactive Navier-Stokes PDE residuals are not closed
+% on instantaneous 2D slices of 3D swirling turbulent flames (thin-sheet dilatation,
+% unobserved out-of-plane transport d_z v_k and v_k d_z T, unobserved heat release rate omega_T).
+
+\section{The Global-Local-Uncertainty (GLU) Framework}
+\label{sec:bg_glu}
+% To be expanded: Exact mathematical formulation of GLU (Wang, Chen, Tricard, Chen, & Deng, 2026)
+% and its reference implementation:
+% 1. Fourier coordinate embedding and value projection with RMSNorm;
+% 2. DomainAdaptiveEncoder: bidirectional cross-attention with S learnable latent tokens and CLS token;
+% 3. Coordinate-only Beta importance field phi(x) ~ Beta(alpha(x), beta(x)) and importance-warped k-NN distance d_phi;
+% 4. SoftDomainAdaptiveReconstructor: local neighborhood aggregation, SpatiallyAwareCLSFusion gate, and heteroscedastic NLL variance head;
+% 5. Comparison between original GLU's single-condition co-located setup and our cross-variable multi-condition combustion diagnostic problem.

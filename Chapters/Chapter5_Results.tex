@@ -1,0 +1,22 @@
+% Chapter 5 — Experimental Results and Discussion (Skeleton)
+
+\section{Classical Baseline Benchmarks and Linear Representation Ceiling}
+\label{sec:res_baselines}
+% To be expanded (all data and figures already verified from Month 1):
+% 5.1.1 Temperature-Free Transfer Across Splits: Level Resolution via (NH3%, phi) vs. Instantaneous Flame-Front Estimation Gap (Table 1, Figure fig08).
+% 5.1.2 OraclePOD vs. GappyPOD: Proving that Estimation Nonlinearity, Not Linear Basis Expressivity or Velocity Sparsity (1%-20%, Figure fig09a), Limits Reconstruction.
+% 5.1.3 Per-Condition Analysis: Scaling of Flame-Brush Error with Equivalence Ratio phi and Complementarity of Global (GappyPOD) vs. Local (LocalHGB) Models (Table 2).
+% 5.1.4 2-Component Planar PIV vs. 3-Component Stereo-PIV Ablation.
+% 5.1.5 Temperature-Assisted Classical Baselines: Anchor Offset (+AO) Variance Law vs. Joint Modal (+T-block) Assimilation for K in {1..32} (Table 3, Figures fig09b, fig10).
+
+\section{Dense Velocity Diagnostics and Temporal Window Study}
+\label{sec:res_dense}
+% To be populated in Month 2 (Step 2.4): Dense 2C U-Net results (p off/on, single-frame vs. 3-frame causal window).
+
+\section{Temperature-Free Sparse Neural Reconstruction}
+\label{sec:res_sparse_free}
+% To be populated in Month 2 (Step 2.6 & 2.8): Comparison of Adapted GLU, Masked U-Net, and GappyPOD at 1%, 5%, and 20% velocity coverage across seen, val, test_interp, and test_extrap splits.
+
+\section{Temperature-Assisted Neural Reconstruction with Sparse Thermocouples}
+\label{sec:res_assisted}
+% To be populated in Month 2-3 (Step 2.7 & 2.8): Comparison of Neural + AO, Two-Stage Residual Assimilation, and GappyPOD (+AO / +T-block) across nested thermocouple counts K in {0, 1, 4, 9, 16, 32}.

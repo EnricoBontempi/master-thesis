@@ -1,0 +1,28 @@
+% Chapter 3 — Dataset Audit, Physical Coupling Analysis, and Experimental Protocol (Skeleton)
+
+\section{The RealPDEBench Swirl-Combustor LES Dataset}
+\label{sec:data_overview}
+% To be expanded: 3D LES numerical setup (38 species, 184 reactions, EDC turbulence-chemistry model),
+% 2D diametral slice (128x128, dx=0.58 mm, dy=0.76 mm, dt=0.25 ms at 4000 Hz, 2001 frames),
+% inventory of all 30 operating conditions across NH3 in {0, 20, 40, 60, 80}% and phi in [0.75, 1.30] (Figure fig01).
+
+\section{Geometric Orientation, Physical Channels, and Data Quality Audit}
+\label{sec:data_geometry}
+% To be expanded: Symmetry axis at row 64, V-shaped cold unburnt reactant jets entering from col 127,
+% central hot Inner Recirculation Zone (IRZ) (Figures fig02, fig03), velocity components (v_i radial, v_j axial, v_k azimuthal swirl),
+% recomputation of |u| vs. Ch 14 artifacts, rare Ch 10 grid-interpolation outliers, and separation of planar OH (Ch 8) from line-of-sight OH* (`observed`).
+
+\section{Thermodynamic Trends, Temporal Autocorrelation, and Kinematic Coupling}
+\label{sec:data_coupling}
+% To be expanded: Domain-mean temperature and velocity trends across the 30 conditions (Figure fig05),
+% temperature histograms and flame-brush autocorrelation tau_c ~ 14 ms (50-100 frames, Figure fig04),
+% Check 1 kinematic-thermal correlations (Pearson, Spearman, MI) and cross-condition conditional expectation curves E[T | |u|] (Figure fig07),
+% and front-localized 2D dilatation correlation with |grad T| (r = +0.24) vs. bulk T (r = -0.02).
+
+\section{Locked Operating-Condition Splits and Decomposed Evaluation Protocol}
+\label{sec:data_protocol}
+% To be expanded: Why official RealPDEBench numerical val/test splits are empty,
+% locked 20 train / 3 val / 3 test_interp / 4 test_extrap operating-condition partition (Figure fig06),
+% temporal split protocol (train_fit [0..1480] vs. seen_train_eval [1600..2000] with 120-frame buffer),
+% fit-only normalization, observation layouts (1%, 2%, 5%, 10%, 20% random, rakes, shear-layer occlusion, nested K thermocouples),
+% and error decomposition: RMSE^2 = Bias^2 + Centered-RMSE^2, plus regional Hot-Core (T >= 2100 K) and Jet/Flame-Front (T < 1800 K) metrics.

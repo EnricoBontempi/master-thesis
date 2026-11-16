@@ -1,0 +1,31 @@
+% Chapter 4 — Reconstruction Methodology: Classical Baselines and Neural Architectures (Skeleton)
+
+\section{Non-Neural Reconstruction Baselines and Linear Representation Bounds}
+\label{sec:meth_baselines}
+% To be expanded:
+% 4.1.1 Zero-Sensor Baselines: GlobalTrainMean and centered piecewise-linear ParamConditionedMean with LOCO-CV selection.
+% 4.1.2 Pointwise Nonlinear Regression: LocalVelocityTemperatureRegressor (LocalHGB on 3x3 patches, 2C vs. 3C).
+% 4.1.3 Modal Reconstruction: Unconditioned and Conditioned GappyPOD with variance-scaled MAP regularization and block-normalized weights (1/M_u vs. w_T/K).
+% 4.1.4 Linear Representation Ceiling: OraclePOD direct temperature projection onto the R=32 POD modes.
+% 4.1.5 Linear Thermocouple Assimilation: Damped Anchor Offset (+AO) and theoretical variance law vs. joint weighted modal solve (+T-block).
+
+\section{Dense and Masked Convolutional Baselines (U-Net)}
+\label{sec:meth_unet}
+% To be expanded:
+% 4.2.1 Dense Velocity-to-Temperature U-Net (Empirical Information Ceiling Diagnostic, 1-frame vs. 3-frame causal window [t-2, t-1, t]).
+% 4.2.2 Masked Sparse U-Net (explicit value channel + binary observation mask channel + coordinate encodings + FiLM parameter conditioning).
+
+\section{Adapted Global-Local-Uncertainty (GLU) Neural Reconstructor}
+\label{sec:meth_glu}
+% To be expanded:
+% 4.3.1 Stage-0 Spatial Reconstruction Pipeline and Input Isolation Guardrails.
+% 4.3.2 Scale-Preserving Co-Located Velocity Token Embedding.
+% 4.3.3 Bidirectional Latent Cross-Attention Encoder and Operating-Parameter Conditioning (FiLM on global CLS/latent tokens and decoder).
+% 4.3.4 Coordinate-Conditioned Local Neighborhood Aggregation and Spatially Aware CLS Gated Fusion.
+
+\section{Thermocouple Assimilation in Neural Reconstructors}
+\label{sec:meth_assimilation}
+% To be expanded:
+% 4.4.1 Post-Hoc Shrinkage Anchor Offset (+AO) on Neural Predictions.
+% 4.4.2 Two-Stage Residual Cross-Attention Head on Anchor Discrepancies e_k = T(x_k) - T_0(x_k).
+% 4.4.3 Methodological Extension: Snapshot-Conditioned Low-Rank Correction Basis and Front Alignment.
