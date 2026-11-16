@@ -1,30 +1,561 @@
-% Chapter 2 — Physical and Methodological Background (Skeleton)
+% Chapter 2 — Physical and Methodological Background
 
+Reconstructing two-dimensional instantaneous temperature fields from sparse velocity measurements in a turbulent swirl combustor requires bridging two domains: the aerothermochemistry of variable-density reacting flows and the mathematics of inverse field estimation under severe spatial under-determinacy. This chapter establishes the physical and methodological foundations for the remainder of the thesis. Section~\ref{sec:bg_combustion} examines the fluid mechanics of swirl stabilization and vortex breakdown, the thermochemical properties of ammonia--methane ($\text{NH}_3/\text{CH}_4$) co-firing, and the low-Mach-number conservation equations that govern kinematic--thermal coupling across the flame brush. Section~\ref{sec:bg_classical} formulates classical linear and modal reconstruction methods---Proper Orthogonal Decomposition (POD), variance-regularized Gappy POD, and sparse anchor calibration---and analyzes their structural limitations when applied to advected sharp reaction fronts. Section~\ref{sec:bg_pinns} reviews physics-informed neural networks for reacting flows (\textit{RF-PINNs}~\cite{yadav2025rfpinns}) and demonstrates mathematically why two-dimensional partial differential equation (PDE) residuals are not closed on instantaneous planar slices of three-dimensional swirling turbulent flames. Finally, Section~\ref{sec:bg_glu} presents the complete mathematical formulation of the \textit{Global-Local-Uncertainty} (\textbf{GLU}) architecture~\cite{wang2026glu} and contrasts its original co-located single-condition formulation with the cross-variable, multi-condition combustion diagnostic problem addressed in this work.
+
+% ==============================================================================
 \section{Physics of Swirl-Stabilized Ammonia--Methane Flames}
 \label{sec:bg_combustion}
-% To be expanded: Swirl number, vortex breakdown, Inner and Outer Recirculation Zones (IRZ/ORZ),
-% NH3/CH4 thermochemistry (adiabatic flame temperature T_ad, laminar burning velocity S_L,
-% thermal vs. fuel-NOx pathways, equivalence ratio phi effects), and low-Mach kinematic-thermal coupling.
+% ==============================================================================
 
+\subsection{Swirl Aerodynamics, Vortex Breakdown, and Recirculation Topology}
+\label{subsec:bg_swirl}
+
+In continuous-flow gas-turbine combustors, the bulk axial velocity of the incoming reactant stream ($U_0 \sim 10\text{--}30\text{ m/s}$) exceeds the laminar burning velocity of hydrocarbon and ammonia fuels by one to two orders of magnitude. Without a hydrodynamic bluff body or aerodynamic flow reversal, a premixed or partially premixed flame would be convected downstream and extinguished. Swirl stabilization achieves aerodynamic anchoring by imparting an azimuthal (tangential) velocity component $u_\theta$ (denoted $v_k$ in the planar coordinate convention of Chapter~\ref{ch:dataset}) to the annular reactant flow upstream of the combustion chamber dump plane~\cite{syred1974combustion, lilley1977swirl, candel2014dynamics}.
+
+The intensity of azimuthal rotation relative to axial translation is quantified by the non-dimensional swirl number $S_w$, defined as the ratio of the axial flux of azimuthal angular momentum $G_\theta$ to the axial flux of axial momentum $G_x$ normalized by the injector exit radius $R_0$:
+\begin{equation}
+    S_w = \frac{G_\theta}{R_0 G_x} = \frac{\int_0^{R_0} \rho u_x u_\theta r^2 \, dr}{R_0 \int_0^{R_0} \left(\rho u_x^2 + (p - p_\infty)\right) r \, dr},
+    \label{eq:bg_swirl_number}
+\end{equation}
+where $u_x$ and $u_\theta$ are the axial and azimuthal velocity components in cylindrical coordinates $(x, r, \theta)$, $\rho$ is the fluid density, and $p - p_\infty$ is the static pressure deficit relative to the reference chamber pressure.
+
+Within the swirling annular jet, radial momentum conservation requires that the outward centrifugal acceleration be balanced by an inward radial pressure gradient:
+\begin{equation}
+    \frac{\partial p}{\partial r} \approx \frac{\rho u_\theta^2}{r} > 0.
+    \label{eq:bg_radial_pressure}
+\end{equation}
+Integrating Eq.~\eqref{eq:bg_radial_pressure} from the outer radius inward toward the burner centerline ($r = 0$) yields a strong sub-ambient pressure core along the axis immediately downstream of the nozzle:
+\begin{equation}
+    p(x, r=0) \approx p(x, R_0) - \int_0^{R_0} \frac{\rho u_\theta^2(x, r)}{r} \, dr.
+    \label{eq:bg_centerline_pressure}
+\end{equation}
+As the swirling reactant stream exits the nozzle and expands radially into the wider combustion chamber, conservation of angular momentum ($r u_\theta \approx \text{const}$ along mean streamlines in the inviscid limit) causes the azimuthal velocity $u_\theta$ to decay rapidly with downstream distance $x$. By Eq.~\eqref{eq:bg_centerline_pressure}, the radial pressure deficit diminishes downstream, which induces a positive (adverse) axial pressure gradient along the burner centerline:
+\begin{equation}
+    \left.\frac{\partial p}{\partial x}\right|_{r=0} > 0.
+    \label{eq:bg_adverse_dpdx}
+\end{equation}
+
+When the swirl number exceeds a critical threshold ($S_w \gtrsim 0.6$), the kinetic energy of the axial flow along the centerline is insufficient to overcome the adverse pressure recovery in Eq.~\eqref{eq:bg_adverse_dpdx}. A stagnation point forms on the axis, followed by flow reversal ($u_x < 0$) and a topological transition known as \emph{vortex breakdown}~\cite{syred1974combustion, candel2014dynamics}. On a two-dimensional diametral plane passing through the burner axis, vortex breakdown organizes the flow into four distinct hydrodynamic zones:
+\begin{enumerate}
+    \item \textbf{High-velocity annular V-jets:} The incoming cold unburnt reactants ($T_u \approx 300\text{--}400\text{ K}$) diverge radially outward from the injector exit in a conical V-shaped curtain, carrying the peak axial and azimuthal momentum.
+    \item \textbf{Inner Recirculation Zone (IRZ):} Enclosed inside the diverging V-jets along the burner axis lies a large toroidal recirculation bubble where the axial velocity reverses toward the injector. The IRZ traps hot combustion products ($T_b \approx 1900\text{--}2280\text{ K}$) and chain-propagating radicals ($\text{H}$, $\text{OH}$, $\text{O}$), transporting thermal energy and chemical enthalpy upstream to continuously ignite the incoming reactant stream.
+    \item \textbf{Outer Recirculation Zones (ORZ):} Between the outer boundary of the diverging reactant jets and the radial step of the combustor dump plane, secondary corner vortices recirculate burnt and partially cooled gases adjacent to the chamber walls.
+    \item \textbf{Inner and Outer Shear Layers (ISL / OSL):} Along the interfaces separating the high-speed cold reactant jets from the low-speed hot recirculation zones (particularly the ISL bordering the IRZ), intense velocity shear ($\partial u_x / \partial r$) and azimuthal Kelvin--Helmholtz / precessing vortex core (PVC) instabilities roll up coherent vortical structures. These vortices corrugate the reaction sheet, producing the turbulent flame brush where local temperature standard deviations reach $\sigma_T \approx 300\text{--}500\text{ K}$.
+\end{enumerate}
+
+\subsection{Thermochemistry and Kinetics of \texorpdfstring{$\text{NH}_3/\text{CH}_4$}{NH3/CH4} Co-Firing}
+\label{subsec:bg_thermochem}
+
+Consider a binary fuel blend composed of ammonia ($\text{NH}_3$) and methane ($\text{CH}_4$) characterized by the ammonia mole fraction in the fuel stream,
+\begin{equation}
+    X_{\text{NH}_3} = \frac{n_{\text{NH}_3}}{n_{\text{NH}_3} + n_{\text{CH}_4}} \in [0, 1], \qquad X_{\text{CH}_4} = 1 - X_{\text{NH}_3}.
+    \label{eq:bg_nh3_fraction}
+\end{equation}
+The global stoichiometric oxidation reactions for pure methane and pure ammonia in air are given by:
+\begin{align}
+    \text{CH}_4 + 2\,\text{O}_2 &\longrightarrow \text{CO}_2 + 2\,\text{H}_2\text{O} \qquad (\Delta h_c^\circ \approx 50.0\text{ MJ/kg}), \label{eq:bg_ch4_ox} \\
+    \text{NH}_3 + 0.75\,\text{O}_2 &\longrightarrow 0.5\,\text{N}_2 + 1.5\,\text{H}_2\text{O} \qquad (\Delta h_c^\circ \approx 18.6\text{ MJ/kg}). \label{eq:bg_nh3_ox}
+\end{align}
+For one mole of blended fuel $(1 - X_{\text{NH}_3})\,\text{CH}_4 + X_{\text{NH}_3}\,\text{NH}_3$, the stoichiometric oxygen requirement is $\nu_{\text{O}_2,\text{st}}(X_{\text{NH}_3}) = 2 - 1.25\,X_{\text{NH}_3}$ moles of $\text{O}_2$. The global fuel--air equivalence ratio $\phi$ is defined as:
+\begin{equation}
+    \phi = \frac{(n_{\text{fuel}} / n_{\text{O}_2})_{\text{actual}}}{(n_{\text{fuel}} / n_{\text{O}_2})_{\text{st}}} = \frac{n_{\text{CH}_4} + n_{\text{NH}_3}}{n_{\text{O}_2}} \left(2 - 1.25\,X_{\text{NH}_3}\right),
+    \label{eq:bg_equiv_ratio}
+\end{equation}
+where $\phi < 1$ denotes fuel-lean operation (excess oxidizer), $\phi = 1$ denotes stoichiometric proportions, and $\phi > 1$ denotes fuel-rich operation.
+
+Varying the operating point $\mathbf{p} = (X_{\text{NH}_3}, \phi)$ modifies both the equilibrium thermodynamics and the finite-rate chemical kinetics of the flame~\cite{valera2018ammonia, kobayashi2019science, hayakawa2015laminar, okafor2018experimental}:
+
+\begin{enumerate}
+    \item \textbf{Adiabatic Flame Temperature $T_{\text{ad}}(X_{\text{NH}_3}, \phi)$:} Under isobaric, adiabatic equilibrium, the burnt-gas enthalpy balances the sensible plus chemical enthalpy of the unburnt mixture:
+    \begin{equation}
+    \begin{aligned}
+        \sum_{s=1}^{N_s} Y_{s,u} h_s(T_u) &= \sum_{s=1}^{N_s} Y_{s,b}^{\text{eq}}(X_{\text{NH}_3}, \phi) \, h_s\!\left(T_{\text{ad}}(X_{\text{NH}_3}, \phi)\right), \\
+        h_s(T) &= \Delta h_{f,s}^\circ + \int_{T_{\text{ref}}}^T c_{p,s}(T') \, dT'.
+    \end{aligned}
+    \label{eq:bg_tad_balance}
+    \end{equation}
+    At fixed equivalence ratio $\phi$, increasing $X_{\text{NH}_3}$ lowers $T_{\text{ad}}$ monotonically (from $T_{\text{ad}} \approx 2225\text{ K}$ at $X_{\text{NH}_3}=0$ to $T_{\text{ad}} \approx 2070\text{ K}$ at $X_{\text{NH}_3}=1$ for $\phi=1.0$, $T_u=300\text{ K}$, $p=1\text{ atm}$) because the N--H bond dissociation and lower specific reaction enthalpy of ammonia yield less net heat release per unit mass of high-heat-capacity $\text{H}_2\text{O}$ and $\text{N}_2$ products. At fixed $X_{\text{NH}_3}$, $T_{\text{ad}}(\phi)$ follows a concave profile that peaks slightly rich of stoichiometry ($\phi \approx 1.02\text{--}1.05$): on the lean branch ($\phi < 1$), excess nitrogen and oxygen act as a thermal sink; on the rich branch ($\phi > 1$), oxygen depletion prevents complete oxidation to $\text{CO}_2$ and $\text{H}_2\text{O}$, shifting products toward $\text{CO}$, $\text{H}_2$, and unburnt $\text{NH}_3$ while absorbing heat through endothermic dissociation.
+
+    \item \textbf{Laminar Burning Velocity $S_L$, Flame Thickness $\delta_L$, and Damk\"ohler Scaling:} By classical Zeldovich--Frank-Kamenetskii thermal theory~\cite{poinsot2005theoretical}, the unstretched laminar burning velocity $S_L$ and laminar flame thickness $\delta_L$ scale with the thermal diffusivity $D_{\text{th}} = \lambda / (\rho_u c_p)$ and the global chemical reaction rate $\dot{\omega}(T_b)$ as:
+    \begin{equation}
+        S_L \propto \sqrt{D_{\text{th}} \, \frac{\dot{\omega}(T_b)}{\rho_u}}, \qquad \delta_L \sim \frac{D_{\text{th}}}{S_L}, \qquad \tau_{\text{chem}} = \frac{\delta_L}{S_L}.
+        \label{eq:bg_sl_scaling}
+    \end{equation}
+    In $\text{NH}_3/\text{CH}_4/\text{air}$ mixtures, the initial fuel attack proceeds through hydrogen abstraction from both methane ($\text{CH}_4 + \text{OH/H/O} \rightarrow \text{CH}_3 + \dots$) and ammonia ($\text{NH}_3 + \text{OH/H/O} \rightarrow \text{NH}_2 + \dots$). Because $\text{NH}_3$ exhibits a slower H-abstraction rate and scavenges chain-branching $\text{H}$ and $\text{OH}$ radicals into less reactive $\text{NH}_2$ intermediates, $S_L$ decreases nonlinearly with $X_{\text{NH}_3}$~\cite{okafor2018experimental}, dropping from $\sim 0.37\text{ m/s}$ ($X_{\text{NH}_3}=0$) to $\sim 0.065\text{--}0.07\text{ m/s}$ ($X_{\text{NH}_3}=1$) at $\phi=1.0$. Consequently, the chemical timescale $\tau_{\text{chem}}$ increases by more than an order of magnitude across the blending range, reducing the turbulent Damk\"ohler number $Da = \tau_{\text{flow}} / \tau_{\text{chem}}$ and increasing the Karlovitz number $Ka = (\tau_{\text{chem}} / \tau_\eta)$. In a swirl combustor operating at roughly constant bulk inflow velocity ($10\text{--}15\text{ m/s}$), this lower $Da$ delays ignition along the inner shear layer, allows the cold reactant jets to penetrate farther into the chamber before reacting, and amplifies local strain-induced temperature depression---explaining why domain-mean LES temperatures drop by $185\text{--}225\text{ K}$ from $0\%$ to $80\%\text{ NH}_3$, exceeding the pure equilibrium $T_{\text{ad}}$ reduction.
+
+    \item \textbf{Thermal vs.\ Fuel-Bound Nitrogen Kinetics:} In pure methane combustion ($X_{\text{NH}_3}=0$), nitrogen oxides form predominantly via the extended Zeldovich (thermal) mechanism ($\text{O} + \text{N}_2 \rightleftharpoons \text{NO} + \text{N}$, $\text{N} + \text{O}_2 \rightleftharpoons \text{NO} + \text{O}$, $\text{N} + \text{OH} \rightleftharpoons \text{NO} + \text{H}$), whose high activation energy ($E_a / \mathcal{R} \approx 38{,}000\text{ K}$) restricts $\text{NO}$ production to high-temperature post-flame zones ($T > 1800\text{ K}$). Once ammonia is blended into the fuel ($X_{\text{NH}_3} > 0$), fuel-bound nitrogen oxidation dominates via the amine radical sequence $\text{NH}_3 \rightarrow \text{NH}_2 \rightarrow \text{NH}$, which branches between oxidation through nitroxyl ($\text{NH} + \text{O}_2/\text{OH} \rightarrow \text{HNO} \rightarrow \text{NO}$) under lean conditions and selective non-catalytic reduction ($\text{NH}_2 + \text{NO} \rightarrow \text{N}_2 + \text{H}_2\text{O}$, $\text{NH} + \text{NO} \rightarrow \text{N}_2\text{O}/\text{N}_2$) under rich conditions ($\phi > 1.1$)~\cite{kobayashi2019science}. Simultaneously, in locally cooled shear layers or near-wall regions where $T$ drops below $1400\text{ K}$, $\text{N}_2\text{O}$ produced via $\text{NH} + \text{NO} \rightarrow \text{N}_2\text{O} + \text{H}$ fails to thermally decompose ($\text{N}_2\text{O} + \text{H} \rightarrow \text{N}_2 + \text{OH}$). Accurate spatial reconstruction of both the high-temperature IRZ core ($T \ge 2100\text{ K}$) and the cooler jet/flame-front mixing zone ($T < 1800\text{ K}$) is therefore directly relevant to emissions and stability diagnostics.
+\end{enumerate}
+
+\subsection{Low-Mach-Number Conservation Equations and Kinematic--Thermal Coupling}
+\label{subsec:bg_lowmach}
+
+Inside a laboratory gas-turbine combustor at atmospheric or moderate pressure, the characteristic flow velocity ($|\mathbf{u}| \sim 10\text{--}30\text{ m/s}$) is small compared to the speed of sound ($c_s = \sqrt{\gamma \mathcal{R} T / \overline{W}} \sim 350\text{--}900\text{ m/s}$), yielding a Mach number $Ma = |\mathbf{u}| / c_s \lesssim 0.05 \ll 1$. Under the low-Mach-number approximation~\cite{poinsot2005theoretical}, acoustic waves decouple from convective transport, and the total pressure $p(\mathbf{x}, t) = p_0(t) + p_1(\mathbf{x}, t)$ decomposes into a spatially uniform thermodynamic background pressure $p_0$ and a small hydrodynamic perturbation $p_1(\mathbf{x}, t) \sim \mathcal{O}(Ma^2 p_0)$ that drives momentum transport without affecting gas density.
+
+The three-dimensional unsteady variable-density conservation equations for mass, momentum, chemical species mass fractions $Y_s$ ($s = 1, \dots, N_s$), and temperature $T$, closed by the low-Mach ideal-gas equation of state, read:
+\begin{empheq}[left=\empheqlbrace]{align}
+    &\frac{\partial \rho}{\partial t} + \nabla \cdot (\rho \mathbf{u}) = 0, \label{eq:bg_continuity} \\[4pt]
+    &\frac{\partial (\rho \mathbf{u})}{\partial t} + \nabla \cdot (\rho \mathbf{u} \otimes \mathbf{u}) = -\nabla p_1 + \nabla \cdot \boldsymbol{\tau} + \rho \mathbf{g}, \label{eq:bg_momentum} \\[4pt]
+    &\rho \left(\frac{\partial Y_s}{\partial t} + \mathbf{u} \cdot \nabla Y_s\right) = -\nabla \cdot (\rho Y_s \mathbf{V}_s) + \dot{\omega}_s, \qquad s = 1, \dots, N_s, \label{eq:bg_species} \\[4pt]
+    &\rho c_p \left(\frac{\partial T}{\partial t} + \mathbf{u} \cdot \nabla T\right) = \nabla \cdot (\lambda \nabla T) - \rho \left(\sum_{s=1}^{N_s} c_{p,s} Y_s \mathbf{V}_s\right) \cdot \nabla T + \dot{\omega}_T, \label{eq:bg_energy} \\[4pt]
+    &p_0 = \rho \mathcal{R} \frac{T}{\overline{W}}, \qquad \frac{1}{\overline{W}} = \sum_{s=1}^{N_s} \frac{Y_s}{W_s}, \qquad \dot{\omega}_T = -\sum_{s=1}^{N_s} h_s(T) \dot{\omega}_s(\mathbf{Y}, T), \label{eq:bg_eos}
+\end{empheq}
+where $\mathbf{u} = (v_i, v_j, v_k)^\top$ is the three-dimensional velocity vector, $\boldsymbol{\tau} = \mu\left(\nabla \mathbf{u} + \nabla \mathbf{u}^\top - \frac{2}{3}(\nabla \cdot \mathbf{u})\mathbf{I}\right)$ is the viscous stress tensor, $\mathbf{V}_s$ and $\dot{\omega}_s$ are the diffusion velocity and net mass production rate of species $s$, $c_p = \sum_s Y_s c_{p,s}$ is the mixture specific heat capacity, $\lambda$ is the thermal conductivity, $\overline{W}$ is the mixture mean molecular weight, and $\dot{\omega}_T$ is the volumetric chemical heat release rate.
+
+To make the physical coupling between the velocity field $\mathbf{u}$ and the temperature field $T$ explicit, we rewrite the continuity equation~\eqref{eq:bg_continuity} in terms of the material derivative $D/Dt = \partial/\partial t + \mathbf{u} \cdot \nabla$ and substitute the logarithmic material derivative of the equation of state~\eqref{eq:bg_eos} at constant thermodynamic pressure $p_0$:
+\begin{equation}
+    \nabla \cdot \mathbf{u} = -\frac{1}{\rho}\frac{D\rho}{Dt} = \frac{1}{T}\frac{DT}{Dt} + \overline{W} \sum_{s=1}^{N_s} \frac{1}{W_s}\frac{DY_s}{Dt}.
+    \label{eq:bg_dilatation_exact}
+\end{equation}
+Since the mean molecular weight $\overline{W}$ of $\text{NH}_3/\text{CH}_4/\text{air}$ mixtures varies by less than $8\%$ between unburnt reactants and burnt products ($\overline{W} \approx 27\text{--}29\text{ g/mol}$ because $\approx 72\text{--}78\%$ of the mixture is $\text{N}_2$), the thermal expansion term dominates Eq.~\eqref{eq:bg_dilatation_exact}. Substituting the temperature equation~\eqref{eq:bg_energy} yields:
+\begin{equation}
+    \nabla \cdot \mathbf{u} \approx \frac{1}{T}\frac{DT}{Dt} \approx \frac{1}{\rho c_p T}\left[\nabla \cdot (\lambda \nabla T) + \dot{\omega}_T\right].
+    \label{eq:bg_dilatation_thermal}
+\end{equation}
+
+Equations~\eqref{eq:bg_continuity}--\eqref{eq:bg_dilatation_thermal} explain the two central physical properties observed in our combustion dataset (Chapter~\ref{ch:dataset}):
+\begin{enumerate}
+    \item \textbf{Spatial Contrast Between the Thin Reaction Front and Homogeneous Zones:} According to Eq.~\eqref{eq:bg_dilatation_thermal}, velocity divergence (thermal dilatation) is non-zero \emph{only} where conductive heat transfer $\nabla \cdot (\lambda \nabla T)$ or exothermic reaction $\dot{\omega}_T$ is active---that is, inside the thin preheat and reaction layers of the turbulent flame brush ($\sim 0.5\text{--}2\text{ mm}$ thick). Inside both the cold unburnt reactant core ($T \approx T_u$, $\dot{\omega}_T = 0$, $\nabla T \approx \mathbf{0}$) and the uniform post-flame burnt gas filling the IRZ and ORZ ($T \approx T_b$, $\dot{\omega}_T \approx 0$, $\nabla T \approx \mathbf{0}$, which covers roughly $90\%$ of the combustor slice), $\nabla \cdot \mathbf{u} \approx 0$. What distinguishes the cold reactant jets from the hot burnt recirculation zone in the interior of each region is therefore not local divergence, but the macroscopic momentum topology governed by Eqs.~\eqref{eq:bg_swirl_number}--\eqref{eq:bg_momentum}: high-speed incoming V-jets ($|\mathbf{u}| \sim 15\text{--}35\text{ m/s}$) carry cold unburnt gas ($\rho_u \approx 1.15\text{ kg/m}^3$), whereas low-speed recirculating pockets ($|\mathbf{u}| \sim 2\text{--}10\text{ m/s}$) contain expanded hot products ($\rho_b \approx 0.16\text{--}0.19\text{ kg/m}^3$).
+    \item \textbf{Cross-Condition Thermodynamic Non-Uniqueness:} Notice that the continuity and momentum equations~\eqref{eq:bg_continuity}--\eqref{eq:bg_momentum} couple to temperature only through the density ratio $\rho(\mathbf{x})/\rho_u \approx T_u / T(\mathbf{x})$ and logarithmic derivative $\nabla (\ln T) = \nabla T / T$. If the burnt-gas temperature $T_b(X_{\text{NH}_3}, \phi)$ shifts from $2200\text{ K}$ (pure methane, $\phi=1.0$) to $1850\text{ K}$ (high-$\text{NH}_3$ or off-stoichiometric blend) at the same bulk inflow velocity, the unburnt-to-burnt density ratio $\rho_u/\rho_b = T_b/T_u$ changes from $7.3$ to $6.2$, producing a very similar vortex-breakdown flow field $\mathbf{u}(\mathbf{x}, t)$. Consequently, velocity observations alone constrain the spatial geometry of the shear layers and instantaneous vortex roll-up, but leave an intrinsic thermodynamic level ambiguity of $200\text{--}360\text{ K}$ across operating conditions unless the reconstructor is conditioned on the operating parameters $\mathbf{p} = (\text{NH}_3\%, \phi)$ or anchored by sparse temperature sensors.
+\end{enumerate}
+
+% ==============================================================================
 \section{Classical Sparse Field Reconstruction Methods}
 \label{sec:bg_classical}
-% To be expanded: Proper Orthogonal Decomposition (POD), Sirovich snapshot method,
-% Gappy POD (Everson & Sirovich 1995), MAP / variance-scaled ridge regularization,
-% multi-variable sensor weighting, and local nonlinear regression / Kriging.
+% ==============================================================================
 
+\subsection{Proper Orthogonal Decomposition (POD) and the Method of Snapshots}
+\label{subsec:bg_pod}
+
+Proper Orthogonal Decomposition (POD), also known as the Karhunen--Lo\`eve expansion or Principal Component Analysis~\cite{lumley1967structure, sirovich1987turbulence, berkooz1993proper}, seeks a low-dimensional orthonormal subspace that captures the maximum possible fluctuation energy (variance) of a random field ensemble in the $L^2$ sense.
+
+In our cross-variable diagnostic setting, let the spatial domain be discretized on a two-dimensional grid of $N_{\text{pix}} = H \times W$ nodes ($128 \times 128 = 16{,}384$). For each training snapshot $n \in \{1, \dots, N_s\}$ belonging to operating condition $\mathbf{p}_n = (\text{NH}_3\%, \phi)_n$, we center each physical channel around a reference mean field and normalize by its training-set standard deviation to ensure dimensionless commensurability between kinematic ($\text{m/s}$) and thermal ($\text{K}$) fluctuations. Specifically, let $\overline{\mathbf{v}}_i, \overline{\mathbf{v}}_j, \overline{\mathbf{v}}_k \in \mathbb{R}^{N_{\text{pix}}}$ denote the ensemble mean velocity components and $\overline{\mathbf{T}}(\mathbf{p}_n) \in \mathbb{R}^{N_{\text{pix}}}$ denote the reference mean temperature field---chosen either as the unconditioned global training mean $\overline{\mathbf{T}}_{\text{global}}$ or as a parameter-conditioned mean surface $\hat{\mathbf{T}}_{\text{param}}(\mathbf{p}_n)$ fitted via Leave-One-Condition-Out cross-validation (Chapter~\ref{ch:methodology}). Stacking the standardized fluctuations of the $C_u \in \{2, 3\}$ velocity components and temperature yields the joint state vector $\tilde{\mathbf{q}}_n \in \mathbb{R}^{N_{\text{state}}}$ with $N_{\text{state}} = (C_u + 1) N_{\text{pix}}$:
+\begin{equation}
+    \tilde{\mathbf{q}}_n = \begin{bmatrix} \tilde{\mathbf{u}}_n \\ \tilde{\mathbf{T}}_n \end{bmatrix}, \qquad \tilde{\mathbf{u}}_n = \begin{bmatrix} (\mathbf{v}_{i,n} - \overline{\mathbf{v}}_i) / \sigma_{v_i} \\ (\mathbf{v}_{j,n} - \overline{\mathbf{v}}_j) / \sigma_{v_j} \\ (\mathbf{v}_{k,n} - \overline{\mathbf{v}}_k) / \sigma_{v_k} \end{bmatrix} \in \mathbb{R}^{C_u N_{\text{pix}}}, \qquad \tilde{\mathbf{T}}_n = \frac{\mathbf{T}_n - \overline{\mathbf{T}}(\mathbf{p}_n)}{\sigma_T} \in \mathbb{R}^{N_{\text{pix}}}.
+    \label{eq:bg_joint_snapshot}
+\end{equation}
+
+Assembling the $N_s$ training snapshots into the snapshot matrix $\mathbf{X} = [\tilde{\mathbf{q}}_1, \dots, \tilde{\mathbf{q}}_{N_s}]^\top \in \mathbb{R}^{N_s \times N_{\text{state}}}$, POD solves the sequence of constrained variance-maximization problems:
+\begin{equation}
+    \boldsymbol{\phi}_r = \arg\max_{\|\boldsymbol{\phi}\|_2 = 1} \frac{1}{N_s} \sum_{n=1}^{N_s} \left(\tilde{\mathbf{q}}_n^\top \boldsymbol{\phi}\right)^2 \quad \text{subject to} \quad \boldsymbol{\phi}^\top \boldsymbol{\phi}_\ell = 0, \quad \forall \ell < r.
+    \label{eq:bg_pod_variational}
+\end{equation}
+Because the spatial state dimension $N_{\text{state}} = 65{,}536$ exceeds the number of training snapshots $N_s = 760$, Sirovich's \emph{method of snapshots}~\cite{sirovich1987turbulence} computes the exact leading $R \le N_s$ spatial modes via the truncated Singular Value Decomposition (SVD) of $\mathbf{X}$ (or equivalently the eigendecomposition of the $N_s \times N_s$ temporal Gram matrix $\frac{1}{N_s}\mathbf{X}\mathbf{X}^\top$):
+\begin{equation}
+    \frac{1}{\sqrt{N_s}} \mathbf{X} \approx \mathbf{U}_R \boldsymbol{\Sigma}_R \boldsymbol{\Phi}_R^\top, \qquad \boldsymbol{\Phi}_R = [\boldsymbol{\phi}_1, \dots, \boldsymbol{\phi}_R] = \begin{bmatrix} \boldsymbol{\Phi}_u \\ \boldsymbol{\Phi}_T \end{bmatrix} \in \mathbb{R}^{N_{\text{state}} \times R},
+    \label{eq:bg_snapshot_svd}
+\end{equation}
+where $\boldsymbol{\Phi}_R^\top \boldsymbol{\Phi}_R = \mathbf{I}_R$, $\boldsymbol{\Phi}_u \in \mathbb{R}^{C_u N_{\text{pix}} \times R}$ and $\boldsymbol{\Phi}_T \in \mathbb{R}^{N_{\text{pix}} \times R}$ denote the coupled velocity and temperature blocks of the joint modes, and the diagonal entries of $\boldsymbol{\Sigma}_R^2 = \operatorname{diag}(\sigma_1^2, \dots, \sigma_R^2)$ are the empirical modal variances ($\sigma_1^2 \ge \sigma_2^2 \ge \dots \ge \sigma_R^2 > 0$). Any state fluctuation in the $R$-dimensional subspace is approximated as $\tilde{\mathbf{q}} \approx \boldsymbol{\Phi}_R \mathbf{a}$ with modal coefficient vector $\mathbf{a} \in \mathbb{R}^R$, yielding the reconstructed temperature field:
+\begin{equation}
+    \hat{\mathbf{T}}(\mathbf{a}; \mathbf{p}) = \overline{\mathbf{T}}(\mathbf{p}) + \sigma_T \boldsymbol{\Phi}_T \mathbf{a}.
+    \label{eq:bg_pod_temp_recon}
+\end{equation}
+
+To separate the \emph{linear subspace representation error} from the \emph{sparse velocity-to-temperature estimation error}, one can evaluate the \textbf{Oracle POD ceiling (\texttt{OraclePOD})}, which assumes access to the complete ground-truth temperature fluctuation $\tilde{\mathbf{T}}$ at inference time and computes the best linear least-squares fit onto the temperature mode sub-block $\boldsymbol{\Phi}_T$:
+\begin{equation}
+    \mathbf{a}_{\text{oracle}} = \arg\min_{\mathbf{a} \in \mathbb{R}^R} \|\boldsymbol{\Phi}_T \mathbf{a} - \tilde{\mathbf{T}}\|_2^2 = \left(\boldsymbol{\Phi}_T^\top \boldsymbol{\Phi}_T\right)^{\dagger} \boldsymbol{\Phi}_T^\top \tilde{\mathbf{T}}, \qquad \hat{\mathbf{T}}_{\text{oracle}} = \overline{\mathbf{T}}(\mathbf{p}) + \sigma_T \boldsymbol{\Phi}_T \mathbf{a}_{\text{oracle}}.
+    \label{eq:bg_oracle_pod}
+\end{equation}
+Note that while the full joint modes satisfy $\boldsymbol{\Phi}_u^\top \boldsymbol{\Phi}_u + \boldsymbol{\Phi}_T^\top \boldsymbol{\Phi}_T = \mathbf{I}_R$, the restricted temperature sub-block $\boldsymbol{\Phi}_T$ is not orthogonal by itself ($\boldsymbol{\Phi}_T^\top \boldsymbol{\Phi}_T \neq \mathbf{I}_R$), so Eq.~\eqref{eq:bg_oracle_pod} requires solving the $R \times R$ normal system rather than simple inner-product projection.
+
+\subsection{Gappy POD with Variance-Scaled MAP Regularization}
+\label{subsec:bg_gappy_pod}
+
+When the full field is unobserved, Everson and Sirovich's \emph{Gappy POD} procedure~\cite{everson1995karhunen, willcox2006unsteady} estimates the modal coefficients $\mathbf{a} \in \mathbb{R}^R$ by restricting the basis matrix $\boldsymbol{\Phi}_R$ to the rows where sensors are available. Let $\mathbf{S}_u \in \{0, 1\}^{M_u \times C_u N_{\text{pix}}}$ be the binary selection matrix that extracts the $M_u$ observed sparse velocity scalars $\mathbf{y}_u = \mathbf{S}_u \tilde{\mathbf{u}} \in \mathbb{R}^{M_u}$, and let $\mathbf{S}_T \in \{0, 1\}^{K \times N_{\text{pix}}}$ extract $K \ge 0$ optional sparse temperature measurements $\mathbf{y}_T = \mathbf{S}_T \tilde{\mathbf{T}} \in \mathbb{R}^K$.
+
+In classical unregularized Gappy POD, $\mathbf{a}$ is obtained by minimizing the unweighted observation residual $\|\mathbf{S}_u \boldsymbol{\Phi}_u \mathbf{a} - \mathbf{y}_u\|_2^2$. In cross-variable turbulent reconstruction, however, unregularized least squares suffers from three severe defects:
+\begin{enumerate}
+    \item \textbf{Ill-conditioning of restricted high-order modes:} On a sparse random or structured mask $\mathbf{S}_u$, the restricted Gram matrix $\mathbf{M}_u = \boldsymbol{\Phi}_u^\top \mathbf{S}_u^\top \mathbf{S}_u \boldsymbol{\Phi}_u \in \mathbb{R}^{R \times R}$ loses orthogonality, and modes whose energy resides primarily in unobserved regions or in the temperature block ($\|\boldsymbol{\Phi}_{u,r}\|_2 \ll \|\boldsymbol{\Phi}_{T,r}\|_2$) produce near-zero eigenvalues in $\mathbf{M}_u$, amplifying small velocity errors into large spurious temperature oscillations.
+    \item \textbf{Isotropic ridge bias:} Standard Tikhonov regularization ($\lambda \|\mathbf{a}\|_2^2$) penalizes all $R$ modes equally, ignoring the fact that across training snapshots the natural variance of mode $r$ decays steeply with $r$ ($\operatorname{Var}(a_r) = \sigma_r^2$).
+    \item \textbf{Modality imbalance ($M_u \gg K$):} When $K \in \{1, \dots, 32\}$ sparse thermocouples are combined with $M_u \sim 10^3\text{--}10^4$ velocity scalars, pooling both into a single unweighted residual weights temperature information by $K / (M_u + K) \sim 10^{-3}$, rendering the thermocouples ineffective unless explicitly block-normalized.
+\end{enumerate}
+
+To overcome all three limitations in a principled Bayesian framework, we formulate cross-variable Gappy POD as Maximum A Posteriori (MAP) estimation under the empirical Gaussian modal prior $\mathbf{a} \sim \mathcal{N}(\mathbf{0}, \boldsymbol{\Sigma}_a)$ with $\boldsymbol{\Sigma}_a = \operatorname{diag}(\sigma_1^2, \dots, \sigma_R^2)$ and block-normalized observation likelihoods:
+\begin{equation}
+    \hat{\mathbf{a}}_{\text{MAP}} = \arg\min_{\mathbf{a} \in \mathbb{R}^R} \left\{ \frac{1}{M_u} \|\mathbf{S}_u \boldsymbol{\Phi}_u \mathbf{a} - \mathbf{y}_u\|_2^2 + \mathbb{I}(K > 0) \frac{w_T}{K} \|\mathbf{S}_T \boldsymbol{\Phi}_T \mathbf{a} - \mathbf{y}_T\|_2^2 + \lambda \sum_{r=1}^R \frac{a_r^2}{\sigma_r^2 + \varepsilon} \right\},
+    \label{eq:bg_gappy_map}
+\end{equation}
+where $\lambda > 0$ is the prior regularization strength, $w_T \ge 0$ controls the relative precision weight of the thermocouple block relative to the velocity block, and $\varepsilon = 10^{-8}$ prevents division by zero. Differentiating Eq.~\eqref{eq:bg_gappy_map} with respect to $\mathbf{a}$ yields the $R \times R$ positive-definite linear system:
+\begin{equation}
+\begin{aligned}
+    &\left( \frac{1}{M_u}\boldsymbol{\Phi}_u^\top \mathbf{S}_u^\top \mathbf{S}_u \boldsymbol{\Phi}_u + \mathbb{I}(K > 0)\frac{w_T}{K}\boldsymbol{\Phi}_T^\top \mathbf{S}_T^\top \mathbf{S}_T \boldsymbol{\Phi}_T + \lambda \operatorname{diag}\!\left(\frac{1}{\sigma_r^2 + \varepsilon}\right) \right) \hat{\mathbf{a}}_{\text{MAP}} \\
+    &\qquad = \frac{1}{M_u}\boldsymbol{\Phi}_u^\top \mathbf{S}_u^\top \mathbf{y}_u + \mathbb{I}(K > 0)\frac{w_T}{K}\boldsymbol{\Phi}_T^\top \mathbf{S}_T^\top \mathbf{y}_T.
+\end{aligned}
+\label{eq:bg_gappy_normal_eq}
+\end{equation}
+
+Notice an important statistical consequence of the $1/M_u$ normalization in Eq.~\eqref{eq:bg_gappy_normal_eq}: when $M_u = p \cdot C_u N_{\text{pix}}$ velocity scalars are sampled uniformly at random with coverage fraction $p \in [0.01, 0.20]$ ($M_u \approx 328\text{--}9830 \gg R = 32$), the normalized sample Gram matrix $\frac{1}{M_u}\boldsymbol{\Phi}_u^\top \mathbf{S}_u^\top \mathbf{S}_u \boldsymbol{\Phi}_u$ converges by the law of large numbers to the population matrix $\frac{1}{C_u N_{\text{pix}}}\boldsymbol{\Phi}_u^\top \boldsymbol{\Phi}_u$ with concentration error $\mathcal{O}(M_u^{-1/2})$. Consequently, once $M_u \gg R$, increasing the random velocity sampling density from $1\%$ to $20\%$ barely alters $\hat{\mathbf{a}}_{\text{MAP}}$; the reconstruction accuracy of Gappy POD is governed instead by the linear cross-covariance between $\boldsymbol{\Phi}_u$ and $\boldsymbol{\Phi}_T$.
+
+\subsection{Anchor Offset Calibration (\texttt{+AO}) vs.\ Joint Modal Solve (\texttt{+T-block})}
+\label{subsec:bg_anchor_offset}
+
+When $K \ge 1$ sparse temperature sensors $\mathcal{O}_T = \{(\mathbf{x}_k, T(\mathbf{x}_k))\}_{k=1}^K$ are available in Track~2, they can be assimilated into a baseline temperature-free prediction $\hat{T}_0(\mathbf{x})$ through two distinct mechanisms with complementary bias--variance trade-offs:
+
+\paragraph{1. Damped Anchor Offset Calibration (\texttt{+AO}).}
+Suppose the true instantaneous temperature field $T(\mathbf{x})$ differs from the temperature-free prediction $\hat{T}_0(\mathbf{x})$ by a spatially uniform level shift $B \in \mathbb{R}$ (where $B = \langle T - \hat{T}_0 \rangle_{\mathbf{x}} = -\text{Bias}(\hat{T}_0)$) plus a zero-mean spatial fluctuation residual $\eta(\mathbf{x})$:
+\begin{equation}
+    T(\mathbf{x}) - \hat{T}_0(\mathbf{x}) = B + \eta(\mathbf{x}), \qquad \langle \eta(\mathbf{x}) \rangle_{\mathbf{x}} = 0, \qquad \langle \eta(\mathbf{x})^2 \rangle_{\mathbf{x}} = \sigma_c^2 = \text{Centered-RMSE}(\hat{T}_0)^2.
+    \label{eq:bg_error_decomp_model}
+\end{equation}
+Evaluating the discrepancy $e_k = T(\mathbf{x}_k) - \hat{T}_0(\mathbf{x}_k) = B + \eta(\mathbf{x}_k)$ at the $K$ thermocouple locations yields $K$ noisy observations of the global offset $B$, where the local spatial pattern error $\eta(\mathbf{x}_k)$ acts as effective observation noise of variance $\sigma_c^2$. Placing a zero-mean Gaussian prior $B \sim \mathcal{N}(0, \sigma_B^2)$ on the global offset yields the shrinkage (damped sample-mean) estimator:
+\begin{equation}
+    \hat{b}_K = \frac{1}{K + \tau} \sum_{k=1}^K \left(T(\mathbf{x}_k) - \hat{T}_0(\mathbf{x}_k)\right), \qquad \hat{T}_{\text{+AO}}(\mathbf{x}) = \hat{T}_0(\mathbf{x}) + \hat{b}_K,
+    \label{eq:bg_anchor_offset_def}
+\end{equation}
+where $\tau = \sigma_c^2 / \sigma_B^2 > 0$ ($\tau = 1$ in our baseline protocol) is the damping pseudocount.
+
+Because adding a spatially uniform constant $\hat{b}_K$ does not alter the centered spatial profile ($\hat{T}_{\text{+AO}}(\mathbf{x}) - \langle \hat{T}_{\text{+AO}} \rangle_{\mathbf{x}} \equiv \hat{T}_0(\mathbf{x}) - \langle \hat{T}_0 \rangle_{\mathbf{x}}$), \texttt{+AO} leaves $\text{Centered-RMSE} = \sigma_c$ strictly invariant for all $K$. Taking the expectation over sensor placements where $\eta(\mathbf{x}_1), \dots, \eta(\mathbf{x}_K)$ are approximately uncorrelated with variance $\sigma_c^2$, the residual level bias satisfies:
+\begin{equation}
+\begin{aligned}
+    \hat{b}_K - B &= -\frac{\tau}{K + \tau} B + \frac{1}{K + \tau} \sum_{k=1}^K \eta(\mathbf{x}_k) \\
+    &\implies \mathbb{E}\!\left[(\hat{b}_K - B)^2\right] = \left(\frac{\tau}{K + \tau}\right)^{\!2} B^2 + \frac{K}{(K + \tau)^2}\,\sigma_c^2.
+\end{aligned}
+\label{eq:bg_ao_bias_variance}
+\end{equation}
+Substituting Eq.~\eqref{eq:bg_ao_bias_variance} into the exact orthogonal error decomposition $\text{RMSE}^2 = \text{Bias}^2 + \text{Centered-RMSE}^2$ yields the theoretical \texttt{+AO} variance law:
+\begin{equation}
+    \mathbb{E}\!\left[\text{RMSE}^2(\hat{T}_{\text{+AO}}; K)\right] = \sigma_c^2 \!\left(1 + \frac{K}{(K + \tau)^2}\right) + \left(\frac{\tau}{K + \tau}\right)^{\!2} \text{Bias}(\hat{T}_0)^2.
+    \label{eq:bg_ao_variance_law}
+\end{equation}
+Equation~\eqref{eq:bg_ao_variance_law} explains why a single thermocouple ($K=1$) can \emph{increase} full-field RMSE when $|\text{Bias}(\hat{T}_0)|$ is moderate relative to $\sigma_c$: for $K=1$ and $\tau=1$, the shrinkage factor reduces $\text{Bias}^2$ by $3/4$, but injects $\frac{1}{4}\sigma_c^2$ of local shear-layer fluctuation variance into the global thermal level whenever $\frac{1}{4}\sigma_c^2 > \frac{3}{4}\text{Bias}(\hat{T}_0)^2$ (i.e., $|\text{Bias}(\hat{T}_0)| < \sigma_c / \sqrt{3}$). As $K$ increases to $K \ge 9\text{--}32$, both the prior bias term $\mathcal{O}(K^{-2})$ and the sample-variance inflation term $\mathcal{O}(K^{-1})$ decay rapidly, driving the total RMSE asymptotically toward the floor $\sigma_c$.
+
+\paragraph{2. Joint Weighted Modal Assimilation (\texttt{+T-block}).}
+By contrast, solving Eq.~\eqref{eq:bg_gappy_normal_eq} with $w_T > 0$ (\texttt{+T-block}) uses the $K$ thermocouples to update all $R = 32$ POD modal amplitudes $\hat{\mathbf{a}}_{\text{MAP}}$ simultaneously. This allows the thermocouples to modify both the spatial flame-front pattern ($\text{Centered-RMSE}$) and the domain mean. However, because the restricted temperature basis $\mathbf{S}_T \boldsymbol{\Phi}_T \in \mathbb{R}^{K \times R}$ has rank at most $\min(K, R)$, when $K \ll R$ ($K \in \{1, 4, 9\}$), the $K$ point constraints are underdetermined across the $R=32$ global modes; substantial reductions in spatial pattern error occur only once the number of temperature anchors approaches the effective dimension of the modal basis ($K \ge 16\text{--}32$).
+
+\subsection{Structural Limitations of Fixed Linear Bases on Advected Sharp Fronts}
+\label{subsec:bg_kolmogorov}
+
+Beyond sensor-count scaling, any method that reconstructs temperature as a linear combination of fixed spatial modes $\overline{\mathbf{T}}(\mathbf{p}) + \sigma_T \sum_{r=1}^R a_r \boldsymbol{\phi}_{T,r}(\mathbf{x})$ faces a fundamental geometric barrier when applied to thin, advected reaction fronts~\cite{ravela2007field, peherstorfer2018survey, greif2019decay}.
+
+In approximation theory, the best worst-case error achievable by any $R$-dimensional linear subspace $V_R \subset \mathcal{H}$ in approximating a solution manifold $\mathcal{M} \subset \mathcal{H}$ is quantified by the \emph{Kolmogorov $R$-width}:
+\begin{equation}
+    d_R(\mathcal{M})_{\mathcal{H}} = \inf_{\substack{V_R \subset \mathcal{H} \\ \dim(V_R) = R}} \sup_{T \in \mathcal{M}} \inf_{\hat{T} \in V_R} \|T - \hat{T}\|_{\mathcal{H}}.
+    \label{eq:bg_kolmogorov_width}
+\end{equation}
+For elliptic and diffusion-dominated PDEs with smooth solutions, $d_R(\mathcal{M})$ decays exponentially with $R$ ($d_R \sim e^{-\alpha R}$). For transport-dominated and wave-like manifolds containing sharp interfaces of thickness $\delta_f \ll L$ whose spatial position $\mathbf{x}_f(t)$ varies across realizations, however, the Kolmogorov $R$-width decays only algebraically as $d_R(\mathcal{M})_{L^2} = \mathcal{O}(R^{-1/2})$~\cite{peherstorfer2018survey, greif2019decay}.
+
+Physically, if an instantaneous flame front $T(\mathbf{x}) = T_0(\mathbf{x} - \boldsymbol{\delta}(\mathbf{x}))$ undergoes a small spatial displacement $\boldsymbol{\delta}(\mathbf{x})$ caused by a passing Kelvin--Helmholtz vortex, its first-order Taylor expansion in Eulerian coordinates is:
+\begin{equation}
+    T(\mathbf{x}) \approx T_0(\mathbf{x}) - \boldsymbol{\delta}(\mathbf{x}) \cdot \nabla T_0(\mathbf{x}).
+    \label{eq:bg_eulerian_shift}
+\end{equation}
+Because $\nabla T_0(\mathbf{x})$ is sharply concentrated along the thin reaction sheet ($|\nabla T_0| > 1500\text{ K}$ over a few millimeters), shifting the front by even $2\text{--}3\text{ mm}$ produces a dipolar Eulerian residual of $\pm 300\text{--}500\text{ K}$ whose spatial support moves with the front. When the modal coefficients $\mathbf{a}$ cannot be inferred exactly from sparse velocity, a linear estimator predicts the conditional expectation $\mathbb{E}[\mathbf{a} \mid \mathcal{O}_u]$, which averages across phase-shifted flame realizations. In Eulerian space, averaging sharp step profiles at uncertain locations smears the step into a broadened ramp, systematically under-predicting the peak gradient along the inner shear layer. Conversely, purely local nonlinear regressors (such as gradient-boosted decision trees on $3 \times 3$ velocity patches) avoid global modal smoothing, but lack the non-local spatial context required to distinguish an inflowing jet shear layer from an internal recirculation eddy at identical local velocity.
+
+% ==============================================================================
 \section{Physics-Informed vs.\ Data-Driven Neural Reconstruction in Reacting Flows}
 \label{sec:bg_pinns}
-% To be expanded: Review of RF-PINNs (Yadav, Casel, & Ghani, JCP 2025) for steady/mean flames;
-% detailed analysis of why 2D low-Mach reactive Navier-Stokes PDE residuals are not closed
-% on instantaneous 2D slices of 3D swirling turbulent flames (thin-sheet dilatation,
-% unobserved out-of-plane transport d_z v_k and v_k d_z T, unobserved heat release rate omega_T).
+% ==============================================================================
 
+\subsection{Reactive Flow Physics-Informed Neural Networks (\textit{RF-PINNs})}
+\label{subsec:bg_rfpinns}
+
+To avoid the linear subspace constraints of POD while compensating for sparse observations, Physics-Informed Neural Networks (PINNs)~\cite{raissi2019physics, cai2021physics} parameterize the continuous flow variables as coordinate neural networks (typically multilayer perceptrons with smooth activations) and embed the governing partial differential equations into the training loss via automatic differentiation.
+
+In the context of combustion diagnostics, Yadav, Casel, and Ghani~\cite{yadav2025rfpinns} recently introduced \emph{Reactive Flow Physics-Informed Neural Networks} (\textbf{RF-PINNs}) to reconstruct unmeasured mean temperature $\overline{T}(\mathbf{x})$ and density $\overline{\rho}(\mathbf{x})$ fields from sparse velocity measurements in laminar and turbulent flames. Rather than solving the stiff multi-species transport equations~\eqref{eq:bg_species}--\eqref{eq:bg_energy} directly, RF-PINNs formulate the inverse problem for \emph{time-averaged (steady-state or Reynolds-Averaged Navier--Stokes, RANS)} two-dimensional planar or axisymmetric flames by introducing a scalar reaction progress variable $c(\mathbf{x}) \in [0, 1]$ ($c=0$ in unburnt reactants, $c=1$ in fully burnt products). A coordinate MLP $\mathcal{N}_\theta : \mathbf{x} \mapsto (\overline{\mathbf{u}}, \overline{p}_1, \overline{c}, \nu_t)$ is optimized over a single target flame by minimizing a weighted composite objective:
+\begin{equation}
+\begin{aligned}
+    \mathcal{L}_{\text{RF-PINN}}(\theta) &= \lambda_{\text{data}} \frac{1}{M_u}\sum_{m=1}^{M_u} \|\overline{\mathbf{u}}_\theta(\mathbf{x}_m) - \overline{\mathbf{u}}_{\text{obs}}(\mathbf{x}_m)\|_2^2 \\
+    &\quad + \lambda_{\text{cont}} \|\mathcal{R}_{\text{cont}}\|_{\Omega}^2 + \lambda_{\text{mom}} \|\boldsymbol{\mathcal{R}}_{\text{mom}}\|_{\Omega}^2 + \lambda_c \|\mathcal{R}_c\|_{\Omega}^2 + \lambda_{\text{bc}} \mathcal{L}_{\text{bc}},
+\end{aligned}
+\label{eq:bg_rfpinn_loss}
+\end{equation}
+where the mean density and temperature are linked algebraically to the progress variable via a single-parameter low-Mach thermochemical closure:
+\begin{equation}
+    \overline{T}(c) = T_u + c\,(T_b - T_u), \qquad \overline{\rho}(c) = \frac{\rho_u T_u}{T_u + c\,(T_b - T_u)},
+    \label{eq:bg_rfpinn_closure}
+\end{equation}
+and the steady RANS continuity residual $\mathcal{R}_{\text{cont}} = \nabla \cdot (\overline{\rho}(c)\,\overline{\mathbf{u}})$ and steady momentum residual $\boldsymbol{\mathcal{R}}_{\text{mom}}$ (closed with a Boussinesq eddy viscosity $\nu_t$) allow the spatial variation of $\overline{\mathbf{u}}(\mathbf{x})$ to constrain $\nabla \overline{\rho}(\mathbf{x})$ and hence $\overline{T}(\mathbf{x})$.
+
+\subsection{Why 2D PDE Residuals Are Unclosed on Instantaneous 3D Swirling Slices}
+\label{subsec:bg_pde_unclosed}
+
+While RF-PINNs are effective for reconstructing \emph{time-averaged} axisymmetric fields of a single flame where $\partial/\partial t \equiv 0$ and mean azimuthal derivatives vanish ($\partial \overline{(\cdot)} / \partial \theta \equiv 0$), applying a 2D low-Mach Navier--Stokes or energy PDE residual loss to reconstruct an \emph{instantaneous two-dimensional slice} $T(x, y, z=0, t)$ of a three-dimensional turbulent swirling flame from sparse single-frame velocity measurements is mathematically ill-posed and physically unclosed.
+
+To see this explicitly, let $(x, y)$ denote the in-plane Cartesian coordinates on the diametral measurement slice $z = 0$ (with in-plane velocity components $v_i = u_x$, $v_j = u_y$) and let $z$ denote the out-of-plane coordinate normal to the laser sheet (with out-of-plane azimuthal swirl velocity $v_k = u_z$). Projecting the exact three-dimensional unsteady low-Mach continuity equation~\eqref{eq:bg_continuity} and temperature equation~\eqref{eq:bg_energy} onto the plane $z = 0$ yields:
+\begin{equation}
+    \underbrace{\frac{\partial v_i}{\partial x} + \frac{\partial v_j}{\partial y}}_{\substack{\nabla_{\text{2D}} \cdot \mathbf{u} \\ \text{(In-plane divergence)}}} = -\frac{1}{\rho}\left(v_i \frac{\partial \rho}{\partial x} + v_j \frac{\partial \rho}{\partial y}\right) - \underbrace{\frac{1}{\rho}\frac{\partial \rho}{\partial t}}_{\substack{\text{Unobserved} \\ \text{Eulerian rate}}} - \underbrace{\left(\frac{\partial v_k}{\partial z} + \frac{v_k}{\rho}\frac{\partial \rho}{\partial z}\right)}_{\substack{\text{Unobserved out-of-plane} \\ \text{swirl divergence \& transport}}},
+    \label{eq:bg_2d_continuity_unclosed}
+\end{equation}
+and
+\begin{equation}
+\begin{aligned}
+    \rho c_p \left(v_i \frac{\partial T}{\partial x} + v_j \frac{\partial T}{\partial y}\right) - \nabla_{\text{2D}} \cdot (\lambda \nabla_{\text{2D}} T) &= -\underbrace{\rho c_p \frac{\partial T}{\partial t}}_{\substack{\text{Unobserved} \\ \text{unsteady term}}} + \underbrace{\dot{\omega}_T(\mathbf{Y}, T)}_{\substack{\text{Unobserved 38-species} \\ \text{chemical source}}} \\
+    &\quad - \underbrace{\rho c_p v_k \frac{\partial T}{\partial z} + \frac{\partial}{\partial z}\!\left(\lambda \frac{\partial T}{\partial z}\right)}_{\substack{\text{Unobserved out-of-plane} \\ \text{swirl convection \& conduction}}}.
+\end{aligned}
+\label{eq:bg_2d_energy_unclosed}
+\end{equation}
+
+Inspecting Eqs.~\eqref{eq:bg_2d_continuity_unclosed} and~\eqref{eq:bg_2d_energy_unclosed} reveals four distinct closure breakdowns on an instantaneous 2D slice:
+
+\begin{enumerate}
+    \item \textbf{Unobserved Out-of-Plane Swirl Gradients ($\partial_z v_k \neq 0$, $v_k \partial_z T \neq 0$):} Unlike a statistically axisymmetric mean flow, an instantaneous turbulent swirl flame is strongly three-dimensional: precessing vortex cores, helical shear-layer roll-up, and azimuthal flame-front wrinkles produce out-of-plane velocity divergence $\partial v_k / \partial z$ and azimuthal scalar convection $v_k \partial T / \partial z$ that are of the same order of magnitude as the in-plane derivatives ($\partial_z v_k \sim \mathcal{O}(\partial_x v_i + \partial_y v_j)$). Neither planar 2C PIV nor single-plane 3C Stereo-PIV measures out-of-plane spatial derivatives $\partial / \partial z$. Setting $\partial_z v_k = 0$ and $v_k \partial_z T = 0$ in a 2D PDE residual forces the reconstructed in-plane temperature gradient $\nabla_{\text{2D}} T$ to absorb three-dimensional vortex stretching and out-of-plane convection as spurious thermal sources and sinks.
+
+    \item \textbf{Unobserved Instantaneous Eulerian Time Derivatives ($\partial_t \rho$, $\partial_t T$):} In an unsteady shear layer where coherent vortices convect at $15\text{--}25\text{ m/s}$ across a flame front of thickness $\delta_f \sim 1\text{ mm}$, the local Eulerian time derivative $\partial T / \partial t \approx -\mathbf{u} \cdot \nabla T$ reaches $\sim 10^7\text{ K/s}$, canceling the leading-order convective term $\mathbf{u} \cdot \nabla T$ in Taylor's frozen-turbulence limit. When reconstructing from a single instantaneous frame (or without already knowing the time-resolved temperature trajectory $T(\mathbf{x}, t \pm \Delta t)$), $\partial_t T$ and $\partial_t \rho$ are completely unknown; omitting them equates an unsteady advecting vortex to a stationary standing wave.
+
+    \item \textbf{Unobserved Multi-Species Chemical Heat Release Rate ($\dot{\omega}_T$):} In the 38-species, 184-reaction $\text{NH}_3/\text{CH}_4/\text{air}$ LES system~\cite{hu2026realpdebench}, the instantaneous volumetric heat release rate $\dot{\omega}_T(\mathbf{x}, t) = -\sum_{s=1}^{38} h_s(T)\dot{\omega}_s(\mathbf{Y}, T)$ is a stiff function of 38 radical and intermediate mass fractions ($\text{OH}$, $\text{H}$, $\text{O}$, $\text{CH}_3$, $\text{HCO}$, $\text{NH}_2$, $\text{HNO}$, $\text{NO}$, etc.) and local turbulent strain. None of these species mass fractions are measured at inference time, nor does a single progress-variable relationship $\dot{\omega}_T(T)$ hold across 30 operating conditions spanning lean-to-rich equivalence ratios ($\phi \in [0.75, 1.30]$), fuel blends ($\text{NH}_3 \in [0, 80]\%$), and partially quenched shear regions.
+
+    \item \textbf{Spatial Support Degeneracy and Scale Invariance Outside the Flame Sheet:} Even if all three-dimensional and temporal derivatives were known, substituting $\rho \propto 1/T$ into the continuity equation~\eqref{eq:bg_dilatation_exact} shows that velocity divergence depends only on the logarithmic derivative $\nabla (\ln T) = \nabla T / T$. First, $\nabla (\ln T)$ is invariant under any constant multiplicative rescaling $T(\mathbf{x}) \mapsto \alpha T(\mathbf{x})$, providing zero constraint on the absolute burnt-gas temperature scale unless boundary temperatures are fixed everywhere. Second, as established in Section~\ref{subsec:bg_lowmach}, $\nabla T / T$ and $\dot{\omega}_T$ vanish outside the thin reaction sheet (across $\sim 90\%$ of the domain in the IRZ/ORZ and inside the cold jet core). Empirically, on the \textit{RealPDEBench} training set (Chapter~\ref{ch:dataset}), planar divergence $\nabla_{\text{2D}} \cdot \mathbf{u} = \partial_x v_i + \partial_y v_j$ exhibits a modest positive correlation with the temperature gradient magnitude $|\nabla_{\text{2D}} T|$ along the reaction sheet ($r = +0.24$ on representative stoichiometric snapshots), but is virtually uncorrelated with the temperature field $T$ itself across the domain ($r = -0.02$).
+\end{enumerate}
+
+\subsection{Amortized Data-Driven Field Reconstruction Paradigms}
+\label{subsec:bg_datadriven_paradigms}
+
+Because direct PDE-residual inversion on an instantaneous 2D slice is both physically unclosed and computationally prohibitive for kilohertz diagnostics (requiring thousands of gradient-descent iterations per frame), modern sparse reconstruction methods adopt \emph{amortized data-driven learning}~\cite{deng2025sciml, wang2024reacting, wang2026ammonia}: using an ensemble of high-fidelity multi-physics training simulations, a parameterized neural operator or field reconstructor $\mathcal{F}_\theta$ learns the statistical and physical manifold relating sparse observations to the full target field, enabling single-pass inference in milliseconds.
+
+Existing neural architectures for sparse field reconstruction fall into four primary families:
+\begin{enumerate}
+    \item \textbf{Grid-Based Convolutional Networks (Voronoi-CNN and Masked U-Net):} Convolutional architectures such as the U-Net~\cite{ronneberger2015unet} or Voronoi-tessellation CNNs~\cite{fukami2021global} map sparse sensors onto a regular Cartesian grid---either by nearest-neighbor Voronoi interpolation or by concatenating a zero-filled value tensor with an explicit binary validity mask channel $M(\mathbf{x}) \in \{0, 1\}$ and spatial coordinate channels---and apply multi-scale encoder--decoder convolutions with skip connections. While effective at capturing local spatial translations and multi-scale image textures, fixed-stencil convolutions struggle when the observation mask is extremely sparse ($1\%\text{--}5\%$), irregular, or variable across deployments, as early convolutional layers mostly process uninformative zeros.
+    \item \textbf{Spectral and Continuous Neural Operators (FNO, DeepONet, RecFNO):} Neural operators such as the Fourier Neural Operator (FNO)~\cite{li2021fourier, zhao2024recfno} and DeepONet~\cite{lu2021learning} learn resolution-invariant mappings between infinite-dimensional function spaces. However, standard spectral convolutions truncate high-wavenumber Fourier modes, introducing a smooth spectral bias that blurs steep reaction fronts, and still require sparse irregular inputs to be rasterized or lifted onto a uniform grid.
+    \item \textbf{Global Bottleneck Set-Attention Models (Perceiver and Senseiver):} Attention-based architectures such as Perceiver~\cite{jaegle2021perceiver} and Senseiver~\cite{santos2023senseiver} ingest an arbitrary set of $N_s$ coordinate-value sensor tokens $\{(\mathbf{x}_i, \mathbf{u}_i)\}_{i=1}^{N_s}$ without grid rasterization, compressing them via cross-attention into a fixed bank of $L \ll N_s$ global latent vectors before decoding at query coordinates $\mathbf{y}$ via a second cross-attention stage. While this eliminates grid dependence, routing all information through a compact global bottleneck discards fine-scale, high-frequency local variations anchored near individual sensors~\cite{wang2026glu}.
+    \item \textbf{Global--Local Token Fusion and Function-Space Generation (GLU and DMF-Gen):} To overcome the dichotomy between global bottleneck compression and purely local interpolation, recent work from the MIT Deng group has introduced \emph{sensor--global--sensor} architectures that maintain both a compact global context representation and spatially anchored local sensor tokens. In the deterministic and variational regime, the \textit{Global-Local-Uncertainty} (\textbf{GLU}) framework~\cite{wang2026glu} fuses bidirectional global--local token encoding with uncertainty-driven adaptive neighborhood retrieval. In the probabilistic generative regime, \textit{Direct Measurement-to-Field Generation} (\textbf{DMF-Gen})~\cite{wang2026dmfgen} couples a sensor--global--sensor token representation with functional rectified flow to transport Gaussian random fields into conditional multi-physics ensembles under incomplete channel observability. In this thesis, we build upon the Stage-0 spatial reconstruction backbone of GLU~\cite{wang2026glu} due to its fast single-pass inference, explicit local-plus-global decomposition, and direct predictive variance estimation.
+\end{enumerate}
+
+% ==============================================================================
 \section{The Global-Local-Uncertainty (GLU) Framework}
 \label{sec:bg_glu}
-% To be expanded: Exact mathematical formulation of GLU (Wang, Chen, Tricard, Chen, & Deng, 2026)
-% and its reference implementation:
-% 1. Fourier coordinate embedding and value projection with RMSNorm;
-% 2. DomainAdaptiveEncoder: bidirectional cross-attention with S learnable latent tokens and CLS token;
-% 3. Coordinate-only Beta importance field phi(x) ~ Beta(alpha(x), beta(x)) and importance-warped k-NN distance d_phi;
-% 4. SoftDomainAdaptiveReconstructor: local neighborhood aggregation, SpatiallyAwareCLSFusion gate, and heteroscedastic NLL variance head;
-% 5. Comparison between original GLU's single-condition co-located setup and our cross-variable multi-condition combustion diagnostic problem.
+% ==============================================================================
+
+We now present the exact mathematical formulation of the Stage-0 spatial reconstruction pipeline of the \textit{Global-Local-Uncertainty} (\textbf{GLU}) framework, synthesizing the methodological formulation of Wang et al.~\cite{wang2026glu} with the exact reference PyTorch implementation (\texttt{DomainAdaptiveEncoder}, \texttt{SoftDomainAdaptiveReconstructor}, and \texttt{GLU\_Bay\_DD} in \texttt{external/GLU\_Reconstruction/src/models.py} and \texttt{train.py}).\footnote{In the full GLU pipeline~\cite{wang2026glu}, Stage-0 learns the spatial encoder, adaptive importance field, and field reconstructor from sparse observations, while Stage-1 freezes the spatial modules and trains a hierarchical \emph{Leader--Follower--Dynamics} (\texttt{TemporalDecoderHierarchical}) module to evolve the latent tokens forward in time via explicit Euler integration. Because this thesis focuses on instantaneous cross-variable temperature reconstruction across operating conditions, our primary architectural analysis centers on Stage-0.}
+
+\subsection{Structured Latent State and Coordinate--Value Tokenization}
+\label{subsec:bg_glu_tokenization}
+
+Consider a physical system observed at time $t$ through $N_s$ sparse sensors located at normalized spatial coordinates $\mathbf{X}_s = \{\mathbf{x}_i\}_{i=1}^{N_s} \subset [-1, 1]^2$ recording $C_{\text{in}}$-channel physical measurements $\mathbf{U}_s = \{\mathbf{u}_i\}_{i=1}^{N_s} \subset \mathbb{R}^{C_{\text{in}}}$. Rather than compressing $\mathcal{X}_t = \{(\mathbf{x}_i, \mathbf{u}_i)\}_{i=1}^{N_s}$ into a single global vector or rasterizing it onto a grid, GLU constructs a structured latent state $\mathcal{S}_t$ of dimension $D$ (\texttt{F\_dim}, e.g., $D = 32\text{--}128$):
+\begin{equation}
+    \mathcal{S}_t = \left\{\mathbf{z}_{\text{global}}^{(t)},\, \mathbf{Z}_{\text{local}}^{(t)}\right\}, \qquad \mathbf{z}_{\text{global}}^{(t)} \in \mathbb{R}^{1 \times D}, \qquad \mathbf{Z}_{\text{local}}^{(t)} = \left\{\mathbf{z}_i^{(t)}\right\}_{i=1}^{N_s} \in \mathbb{R}^{N_s \times D},
+    \label{eq:bg_glu_latent_state}
+\end{equation}
+paired with a bounded spatial importance vector $\bar{\boldsymbol{\varphi}} = \left\{\bar{\varphi}(\mathbf{x}_i)\right\}_{i=1}^{N_s} \in (0, 1)^{N_s}$. Here, $\mathbf{z}_{\text{global}}^{(t)}$ is a single Leader (\texttt{cls\_token}) representation summarizing domain-wide organization, while $\mathbf{Z}_{\text{local}}^{(t)}$ are $N_s$ Follower tokens that remain one-to-one anchored to the physical sensor coordinates $\mathbf{x}_i$.
+
+To lift each sparse observation $(\mathbf{x}_i, \mathbf{u}_i)$ into the embedding space $\mathbb{R}^D$ while preserving high-frequency spatial sensitivity, GLU first applies a learnable Gaussian Fourier feature mapping~\cite{tancik2020fourier} (\texttt{FourierEmbedding}):
+\begin{equation}
+    \boldsymbol{\gamma}(\mathbf{x}_i) = \left[\sin(2\pi \mathbf{x}_i \mathbf{B}),\, \cos(2\pi \mathbf{x}_i \mathbf{B})\right] \in \mathbb{R}^{2M_f}, \qquad \mathbf{B} \in \mathbb{R}^{2 \times M_f}, \quad B_{ab} \stackrel{\text{i.i.d.}}{\sim} \mathcal{N}(0, \sigma_f^2),
+    \label{eq:bg_glu_fourier}
+\end{equation}
+where $M_f$ is the number of spatial frequencies (\texttt{num\_freqs}, e.g., $64$ or $256$), $\sigma_f = 10.0$ controls the initial wavenumber bandwidth, and $\mathbf{B}$ is optimized jointly with the network weights.
+
+In the reference implementation (\texttt{build\_pos\_value\_proj} in \texttt{src/models.py}), the Fourier coordinate features $\boldsymbol{\gamma}(\mathbf{x}_i)$ and raw physical values $\mathbf{u}_i$ are projected separately to $\mathbb{R}^D$ via linear layers followed by Root-Mean-Square Layer Normalization (\texttt{nn.RMSNorm}~\cite{zhang2019rmsnorm}, denoted $\text{LayerNorm}$ in Eq.~6 of~\cite{wang2026glu}) and summed element-wise:
+\begin{align}
+    \mathbf{e}_i^{\text{pos}} &= \operatorname{RMSNorm}_{\text{pos}}\!\left(\mathbf{W}_p \boldsymbol{\gamma}(\mathbf{x}_i) + \mathbf{b}_p\right) \in \mathbb{R}^D, \label{eq:bg_glu_epos} \\
+    \mathbf{e}_i^{\text{val}} &= \operatorname{RMSNorm}_{\text{val}}\!\left(\mathbf{W}_v \mathbf{u}_i + \mathbf{b}_v\right) \in \mathbb{R}^D, \label{eq:bg_glu_eval} \\
+    \mathbf{h}_i &= \mathbf{e}_i^{\text{pos}} + \mathbf{e}_i^{\text{val}} \in \mathbb{R}^D, \qquad \mathbf{H} = [\mathbf{h}_1, \dots, \mathbf{h}_{N_s}]^\top \in \mathbb{R}^{N_s \times D}, \label{eq:bg_glu_hi}
+\end{align}
+where for any vector $\mathbf{v} \in \mathbb{R}^D$ with learnable gain $\mathbf{g} \in \mathbb{R}^D$,
+\begin{equation}
+    \operatorname{RMSNorm}(\mathbf{v}) = \frac{\mathbf{g} \odot \mathbf{v}}{\sqrt{\frac{1}{D}\sum_{d=1}^D v_d^2 + \epsilon_{\text{rms}}}}.
+    \label{eq:bg_rmsnorm_def}
+\end{equation}
+
+\subsection{Bidirectional Global--Local Encoding}
+\label{subsec:bg_glu_encoder}
+
+Standard Perceiver-style encoders~\cite{jaegle2021perceiver, santos2023senseiver} map the $N_s$ sensor embeddings $\mathbf{H} \in \mathbb{R}^{N_s \times D}$ into a small bank of $L$ latent queries ($L \ll N_s$, denoted $S$ in~\cite{wang2026glu}) and discard $\mathbf{H}$. To prevent this information bottleneck, the \texttt{DomainAdaptiveEncoder} module executes a two-stage bidirectional (\emph{sensor $\rightarrow$ latent $\rightarrow$ sensor}) exchange.
+
+First, the encoder initializes $L$ learnable latent query vectors $\mathbf{L}_0 \in \mathbb{R}^{L \times D}$ (\texttt{latent\_tokens}, e.g., $L = 64$, initialized from $\mathcal{N}(0, 0.02^2)$) and, when \texttt{retain\_cls=True}, prepends a learnable leader token $\mathbf{z}_{\text{cls},0} \in \mathbb{R}^{1 \times D}$ to form the combined latent query array:
+\begin{equation}
+    \tilde{\mathbf{L}}_0 = \begin{bmatrix} \mathbf{z}_{\text{cls},0} \\ \mathbf{L}_0 \end{bmatrix} \in \mathbb{R}^{(1 + L) \times D}.
+    \label{eq:bg_glu_latent_bank}
+\end{equation}
+
+\paragraph{Stage 1: Sensor-to-Latent Global Aggregation.}
+The $1 + L$ latent queries attend to all $N_s$ sensor embeddings $\mathbf{H}$ via multi-head cross-attention (\texttt{cross\_attn}, with $N_h$ heads and $N_{\text{lay}}$ layers) followed by a stack of $N_{\text{lay}}$ Transformer self-attention encoder blocks (\texttt{cross\_latent\_mixer} with GELU activations):
+\begin{align}
+    \tilde{\mathbf{L}}_{\text{norm}} &= \operatorname{RMSNorm}_1(\tilde{\mathbf{L}}_0), \label{eq:bg_glu_enc_step1a} \\
+    \tilde{\mathbf{L}}_1 &= \tilde{\mathbf{L}}_{\text{norm}} + \operatorname{CrossAttn}_1\!\left(Q = \tilde{\mathbf{L}}_{\text{norm}},\, K = \mathbf{H},\, V = \mathbf{H}\right), \label{eq:bg_glu_enc_step1b} \\
+    \tilde{\mathbf{L}} &= \tilde{\mathbf{L}}_1 + \operatorname{TransformerStack}_1(\tilde{\mathbf{L}}_1) \in \mathbb{R}^{(1 + L) \times D}. \label{eq:bg_glu_enc_step1c}
+\end{align}
+Here, the cross-attention step scales linearly with the sensor count, $\mathcal{O}(N_s L D)$, compressing domain-wide multi-sensor correlations into $\tilde{\mathbf{L}}$.
+
+\paragraph{Stage 2: Latent-to-Sensor Local Enrichment.}
+Rather than decoding directly from the compressed array $\tilde{\mathbf{L}}$, the refined global summary is broadcast back to the $N_s$ spatially anchored sensor tokens via a reverse cross-attention block (\texttt{token\_to\_latent}) and a subsequent Transformer refinement stack (\texttt{token\_to\_latent\_mixer}):
+\begin{align}
+    \mathbf{H}_{\text{norm}} &= \operatorname{RMSNorm}_2(\mathbf{H}), \label{eq:bg_glu_enc_step2a} \\
+    \mathbf{H}_1 &= \mathbf{H}_{\text{norm}} + \operatorname{CrossAttn}_2\!\left(Q = \mathbf{H}_{\text{norm}},\, K = \tilde{\mathbf{L}},\, V = \tilde{\mathbf{L}}\right), \label{eq:bg_glu_enc_step2b} \\
+    \mathbf{Z}_{\text{local}} &= \mathbf{H}_1 + \operatorname{TransformerStack}_2(\mathbf{H}_1) \in \mathbb{R}^{N_s \times D}. \label{eq:bg_glu_enc_step2c}
+\end{align}
+Through residual connections, each enriched sensor token $\mathbf{z}_i \in \mathbb{R}^D$ (the $i$-th row of $\mathbf{Z}_{\text{local}}$) retains its exact local measurement embedding $\mathbf{h}_i$ while incorporating global contextual features extracted from all other sensors across the domain. Finally, extracting the updated leader token $\mathbf{z}_{\text{global}} = \tilde{\mathbf{L}}_{0,:} \in \mathbb{R}^{1 \times D}$ from the first row of $\tilde{\mathbf{L}}$ yields the output token matrix passed to the reconstructor:
+\begin{equation}
+    \mathbf{Z}_{\text{enc}} = \begin{bmatrix} \mathbf{z}_{\text{global}} \\ \mathbf{Z}_{\text{local}} \end{bmatrix} \in \mathbb{R}^{(1 + N_s) \times D}.
+    \label{eq:bg_glu_zenc}
+\end{equation}
+
+\subsection{Variational Beta Importance Field and Uncertainty Supervision}
+\label{subsec:bg_glu_importance}
+
+In inhomogeneous multi-physics flows such as wakes, boundary layers, and turbulent flames, measurements located near steep shear layers or reaction fronts carry substantially higher information content than measurements inside quiescent uniform regions. GLU models the spatial informativeness of any sensor coordinate $\mathbf{x} \in [-1, 1]^2$ as a bounded random variable $\varphi(\mathbf{x}) \in (0, 1)$ governed by a coordinate-conditioned Beta variational posterior~\cite{figurnov2018implicit, wang2026glu}:
+\begin{equation}
+    q_\psi(\varphi(\mathbf{x}) \mid \mathbf{x}) = \operatorname{Beta}\!\left(\alpha_\psi(\mathbf{x}),\, \beta_\psi(\mathbf{x})\right),
+    \label{eq:bg_glu_beta_dist}
+\end{equation}
+where a three-layer ReLU multilayer perceptron $f_\psi : \mathbb{R}^2 \rightarrow \mathbb{R}^2$ (\texttt{phi\_mlp\_1} in \texttt{GLU\_Bay\_DD}, with hidden dimension $128$) predicts the log-concentration parameters:
+\begin{equation}
+    \alpha_\psi(\mathbf{x}) = \exp\!\left(f_\psi^{(\alpha)}(\mathbf{x})\right) + \varepsilon_\varphi, \qquad \beta_\psi(\mathbf{x}) = \exp\!\left(f_\psi^{(\beta)}(\mathbf{x})\right) + \varepsilon_\varphi, \qquad \varepsilon_\varphi = 10^{-3}.
+    \label{eq:bg_glu_alpha_beta}
+\end{equation}
+During forward encoding and decoding, the deterministic posterior mean (clamped to $[10^{-3}, 1 - 10^{-3}]$ for numerical stability) serves as the spatial importance score of sensor $i$:
+\begin{equation}
+    \bar{\varphi}_i = \bar{\varphi}(\mathbf{x}_i) = \operatorname{clamp}\!\left(\frac{\alpha_\psi(\mathbf{x}_i)}{\alpha_\psi(\mathbf{x}_i) + \beta_\psi(\mathbf{x}_i)},\, 10^{-3},\, 1 - 10^{-3}\right) \in (0, 1).
+    \label{eq:bg_glu_phi_mean}
+\end{equation}
+
+Because ground-truth sensor importance labels do not exist, GLU trains $q_\psi(\varphi(\mathbf{x}) \mid \mathbf{x})$ self-supervisingly from the reconstructor's own predictive variance $\hat{\sigma}^2(\mathbf{y}) = \exp(\hat{s}(\mathbf{y}))$ (Section~\ref{subsec:bg_glu_reconstructor}). Specifically, let $\bar{\sigma}^2(\mathbf{y}) = \operatorname{stopgrad}\!\left(\langle \exp(\hat{s}(\mathbf{y})) \rangle_{B, T, C}\right)$ denote the batch-, time-, and channel-averaged predictive variance at query coordinate $\mathbf{y} \in \Omega$, and define the min--max normalized spatial uncertainty target (\texttt{normalize\_01} in \texttt{train.py}):
+\begin{equation}
+    U(\mathbf{y}) = \frac{\bar{\sigma}^2(\mathbf{y}) - \min_{\mathbf{y}' \in \Omega} \bar{\sigma}^2(\mathbf{y}')}{\max_{\mathbf{y}' \in \Omega} \bar{\sigma}^2(\mathbf{y}') - \min_{\mathbf{y}' \in \Omega} \bar{\sigma}^2(\mathbf{y}') + 10^{-8}} \in [0, 1].
+    \label{eq:bg_glu_norm_uncert}
+\end{equation}
+The parameters $\psi$ of the importance network are optimized by minimizing the negative Evidence Lower Bound (ELBO)-style auxiliary objective (\texttt{compute\_elbo} in \texttt{train.py}, Eq.~17 of~\cite{wang2026glu}):
+\begin{equation}
+\begin{aligned}
+    \mathcal{L}_\varphi(\psi) &= -\frac{1}{M_{\text{MC}}}\sum_{m=1}^{M_{\text{MC}}} \left\langle U(\mathbf{y})\, \varphi^{(m)}(\mathbf{y}) \right\rangle_{\mathbf{y} \in \Omega} + \lambda_{\text{KL}} \left\langle D_{\text{KL}}\!\left(q_\psi(\varphi(\mathbf{y}) \mid \mathbf{y}) \,\|\, p_0(\varphi)\right) \right\rangle_{\mathbf{y} \in \Omega} \\
+    &\quad - \lambda_H \left\langle \mathcal{H}\!\left[q_\psi(\varphi(\mathbf{y}) \mid \mathbf{y})\right] \right\rangle_{\mathbf{y} \in \Omega} - \lambda_V \operatorname{Var}_{\mathbf{y} \in \Omega}\!\left[\bar{\varphi}(\mathbf{y})\right],
+\end{aligned}
+\label{eq:bg_glu_elbo_loss}
+\end{equation}
+where $\varphi^{(m)}(\mathbf{y}) \sim q_\psi(\varphi(\mathbf{y}) \mid \mathbf{y})$ are $M_{\text{MC}} = 5$ Monte Carlo draws sampled via implicit reparameterization gradients~\cite{figurnov2018implicit}, $p_0(\varphi) = \operatorname{Beta}(\alpha_0, \beta_0)$ is a reference Beta prior, $\mathcal{H}[q_\psi]$ is the differential entropy preventing premature collapse to a point mass, and $\operatorname{Var}_{\mathbf{y} \in \Omega}[\bar{\varphi}(\mathbf{y})]$ encourages spatial contrast so that $\bar{\varphi}(\mathbf{y})$ does not collapse to a spatially uniform constant. By maximizing $\mathbb{E}_{q_\psi}[U(\mathbf{y})\varphi(\mathbf{y})]$, Eq.~\eqref{eq:bg_glu_elbo_loss} assigns higher importance $\bar{\varphi}(\mathbf{x})$ to regions of persistent predictive uncertainty (such as oscillating shear layers and reaction fronts).
+
+\subsection{Soft Domain-Adaptive Reconstructor}
+\label{subsec:bg_glu_reconstructor}
+
+Given the encoded token bank $\mathbf{Z}_{\text{enc}} = [\mathbf{z}_{\text{global}};\, \mathbf{Z}_{\text{local}}] \in \mathbb{R}^{(1 + N_s) \times D}$ and the detached sensor importance scores $\bar{\boldsymbol{\varphi}} = \{\bar{\varphi}_i\}_{i=1}^{N_s}$, the \texttt{SoftDomainAdaptiveReconstructor} module evaluates the continuous physical field and its predictive variance at any set of $P$ query coordinates $\mathbf{Y} = \{\mathbf{y}_j\}_{j=1}^P \subset [-1, 1]^2$ in five steps:
+
+\paragraph{1. Query Coordinate Embedding and Latent Projection.}
+Each query coordinate $\mathbf{y}_j$ is mapped through a dedicated learnable Fourier embedding $\boldsymbol{\gamma}_y(\mathbf{y}_j) \in \mathbb{R}^{2M_f}$, projected linearly to $\mathbb{R}^D$, and normalized via \texttt{RMSNorm}:
+\begin{equation}
+    \mathbf{c}_j = \operatorname{RMSNorm}_{\text{coord}}\!\left(\mathbf{W}_y \boldsymbol{\gamma}_y(\mathbf{y}_j) + \mathbf{b}_y\right) \in \mathbb{R}^D, \qquad j = 1, \dots, P,
+    \label{eq:bg_glu_query_coord}
+\end{equation}
+while the encoded global and local tokens are linearly projected via $\mathbf{W}_{\text{lat}} \in \mathbb{R}^{D \times D}$:
+\begin{equation}
+    \tilde{\mathbf{z}}_{\text{cls}} = \mathbf{W}_{\text{lat}} \mathbf{z}_{\text{global}} + \mathbf{b}_{\text{lat}} \in \mathbb{R}^D, \qquad \tilde{\mathbf{z}}_i = \mathbf{W}_{\text{lat}} \mathbf{z}_i + \mathbf{b}_{\text{lat}} \in \mathbb{R}^D, \quad i = 1, \dots, N_s.
+    \label{eq:bg_glu_lat_proj}
+\end{equation}
+
+\paragraph{2. Importance-Warped Distance and Adaptive $k$-NN Retrieval.}
+To allow sensors in dynamically informative regions to exert a wider radius of influence than sensors in uniform regions, GLU defines an asymmetric, importance-warped distance metric $d_\varphi(\mathbf{y}_j, \mathbf{x}_i)$ between query $\mathbf{y}_j$ and sensor $\mathbf{x}_i$:
+\begin{equation}
+    d_\varphi(\mathbf{y}_j, \mathbf{x}_i) = \begin{cases}
+        \dfrac{\|\mathbf{y}_j - \mathbf{x}_i\|_2}{\bar{\varphi}_i^{\,\gamma} + \epsilon_d}, & \text{if sensor } i \text{ is valid } (m_i = 1), \\[10pt]
+        +\infty, & \text{if sensor } i \text{ is masked/invalid } (m_i = 0),
+    \end{cases}
+    \label{eq:bg_glu_warped_distance}
+\end{equation}
+where $\gamma \ge 0$ is the importance scaling exponent (\texttt{importance\_scale}, e.g., $\gamma \in [0.25, 0.50]$) and $\epsilon_d = 10^{-6}$. When $\bar{\varphi}_i \rightarrow 1$, the denominator approaches unity and the effective distance remains small; when $\bar{\varphi}_i \ll 1$, the warped distance expands by $\bar{\varphi}_i^{-\gamma}$, pushing uninformative sensors out of the local neighborhood.
+
+For each query point $\mathbf{y}_j$, the reconstructor selects the index set $\mathcal{N}_K(\mathbf{y}_j) = \{i_{j,1}, \dots, i_{j,K_{\text{eff}}}\}$ corresponding to the $K_{\text{eff}} = \min(K_{\text{nn}}, N_s)$ smallest warped distances (\texttt{top\_k}, typically $K_{\text{nn}} = 16$). Denoting $d_{j,k} = d_\varphi(\mathbf{y}_j, \mathbf{x}_{i_{j,k}})$ and $\bar{\varphi}_{j,k} = \bar{\varphi}_{i_{j,k}}$, normalized softmax kernel weights are computed over the $K_{\text{eff}}$ neighbors:
+\begin{equation}
+    \tilde{w}_{j,k} = \frac{\exp(-d_{j,k} / \sigma_{i_{j,k}})\, m_{i_{j,k}}}{\sum_{\ell=1}^{K_{\text{eff}}} \exp(-d_{j,\ell} / \sigma_{i_{j,\ell}})\, m_{i_{j,\ell}} + \epsilon_d},
+    \label{eq:bg_glu_kernel_weights}
+\end{equation}
+where $\sigma_i > 0$ is a kernel bandwidth initialized to $\sigma_{\text{init}} = 0.05$ (\texttt{bandwidth\_init}, either shared globally or learned per sensor as $\sigma_i = \exp(\log \sigma_i)$ when \texttt{per\_sensor\_sigma=True}). When direct amplitude weighting is enabled (\texttt{use\_weighted\_fusion=True}, matching Eq.~11 of~\cite{wang2026glu}), the weights are further modulated by the importance score and renormalized:
+\begin{equation}
+    w_{j,k} = \frac{\tilde{w}_{j,k} \, (\bar{\varphi}_{j,k} s_\varphi)}{\sum_{\ell=1}^{K_{\text{eff}}} \tilde{w}_{j,\ell} \, (\bar{\varphi}_{j,\ell} s_\varphi) + \epsilon_d},
+    \label{eq:bg_glu_weighted_fusion}
+\end{equation}
+and otherwise $w_{j,k} = \tilde{w}_{j,k}$.
+
+\paragraph{3. Local Neighborhood Aggregation and Summary Statistics.}
+The local feature vector at query $\mathbf{y}_j$ is obtained by aggregating the $K_{\text{eff}}$ neighbor tokens with weights $w_{j,k}$, normalizing via \texttt{RMSNorm}, applying a two-layer linear value-output projection $\mathbf{W}_{\text{out}}\mathbf{W}_V$, and adding the query coordinate embedding $\mathbf{c}_j$ residually:\footnote{In addition to the kernel-weighted sum in Eq.~\eqref{eq:bg_glu_local_agg} (\texttt{SoftDomainAdaptiveReconstructor.forward}), \texttt{src/models.py} also provides an alternative local cross-attention pathway (\texttt{\_forward}) in which $\mathbf{c}_j$ acts as a single query attending via multi-head attention over the $K_{\text{eff}}$ gathered neighbor tokens $\{\tilde{\mathbf{z}}_{i_{j,k}}\}_{k=1}^{K_{\text{eff}}}$.}
+\begin{equation}
+    \mathbf{h}_j^{\text{agg}} = \operatorname{RMSNorm}_{\text{agg}}\!\left(\sum_{k=1}^{K_{\text{eff}}} w_{j,k} \, \tilde{\mathbf{z}}_{i_{j,k}}\right), \qquad \mathbf{f}_j^{\text{local}} = \mathbf{c}_j + \mathbf{W}_{\text{out}}\!\left(\mathbf{W}_V \mathbf{h}_j^{\text{agg}} + \mathbf{b}_V\right) + \mathbf{b}_{\text{out}} \in \mathbb{R}^D.
+    \label{eq:bg_glu_local_agg}
+\end{equation}
+Simultaneously, the helper routine \texttt{\_topk\_aggregate} computes a four-dimensional local neighborhood geometry and importance descriptor $\mathbf{s}_j \in \mathbb{R}^4$ for uncertainty estimation:
+\begin{equation}
+    \mathbf{s}_j = \begin{bmatrix} \mu_{d,j}, & \sigma_{d,j}, & K_{\text{valid},j}, & \mu_{\varphi,j} \end{bmatrix}^\top \in \mathbb{R}^4,
+    \label{eq:bg_glu_stats_vec}
+\end{equation}
+where $K_{\text{valid},j} = \sum_{k=1}^{K_{\text{eff}}} m_{i_{j,k}}$ is the count of valid neighbors and $\mu_{d,j}$, $\sigma_{d,j}$, and $\mu_{\varphi,j}$ are the weighted mean warped distance, standard deviation of warped distance, and weighted mean importance across $\mathcal{N}_K(\mathbf{y}_j)$:
+\begin{equation}
+\begin{aligned}
+    \mu_{d,j} &= \frac{1}{K_{\text{valid},j}}\sum_{k=1}^{K_{\text{eff}}} w_{j,k} d_{j,k}, \qquad
+    \mu_{\varphi,j} = \frac{1}{K_{\text{valid},j}}\sum_{k=1}^{K_{\text{eff}}} w_{j,k}\bar{\varphi}_{j,k}, \\
+    \sigma_{d,j} &= \sqrt{\frac{1}{K_{\text{valid},j}}\sum_{k=1}^{K_{\text{eff}}} w_{j,k}(d_{j,k} - \mu_{d,j})^2}.
+\end{aligned}
+\label{eq:bg_glu_stats_components}
+\end{equation}
+
+\paragraph{4. Spatially Aware Global--Local Gated Fusion.}
+To combine the local neighborhood feature $\mathbf{f}_j^{\text{local}}$ with the global leader token $\tilde{\mathbf{z}}_{\text{cls}}$ adaptively across the domain, GLU applies a location-dependent gating network (\texttt{SpatiallyAwareCLSFusion} in \texttt{src/models.py}):
+\begin{align}
+    g_j &= \sigma\!\left(\mathbf{w}_{g,2}^\top \operatorname{GELU}\!\left(\mathbf{W}_{g,1} \mathbf{f}_j^{\text{local}} + \mathbf{b}_{g,1}\right) + b_{g,2}\right) \in (0, 1), \label{eq:bg_glu_gate} \\
+    \mathbf{f}_j^{\text{fused}} &= \operatorname{LayerNorm}\!\left(g_j \left(\mathbf{W}_{\text{loc}} \mathbf{f}_j^{\text{local}} + \mathbf{b}_{\text{loc}}\right) + (1 - g_j)\left(\mathbf{W}_{\text{cls}} \tilde{\mathbf{z}}_{\text{cls}} + \mathbf{b}_{\text{cls}}\right)\right) \in \mathbb{R}^D, \label{eq:bg_glu_cls_fusion}
+\end{align}
+where $\mathbf{W}_{g,1} \in \mathbb{R}^{(D/4) \times D}$, $\mathbf{w}_{g,2} \in \mathbb{R}^{D/4}$, and $\sigma(\cdot)$ is the logistic sigmoid function. When \texttt{USE\_FINAL\_MLP=True}, $\mathbf{f}_j^{\text{fused}}$ is passed through a residual Gated Linear Unit (\texttt{GEGLU}) block, $\mathbf{f}_j^{\text{out}} = \mathbf{f}_j^{\text{fused}} + \operatorname{GEGLU}(\mathbf{f}_j^{\text{fused}})$, and otherwise $\mathbf{f}_j^{\text{out}} = \mathbf{f}_j^{\text{fused}}$.
+
+\paragraph{5. Dual Mean and Heteroscedastic Variance Heads and Stage-0 Training Objective.}
+Finally, two linear readout heads map $\mathbf{f}_j^{\text{out}}$ (augmented with a 16-dimensional linear embedding of the local neighborhood descriptor $\mathbf{s}_j$ for the variance branch) to the reconstructed mean field $\hat{\mathbf{u}}(\mathbf{y}_j) \in \mathbb{R}^{C_{\text{out}}}$ and the predicted log-variance $\hat{\mathbf{s}}(\mathbf{y}_j) = \log \hat{\boldsymbol{\sigma}}^2(\mathbf{y}_j) \in \mathbb{R}^{C_{\text{out}}}$:
+\begin{align}
+    \hat{\mathbf{u}}(\mathbf{y}_j) &= \mathbf{W}_{\text{mean}} \mathbf{f}_j^{\text{out}} + \mathbf{b}_{\text{mean}} \in \mathbb{R}^{C_{\text{out}}}, \label{eq:bg_glu_mean_head} \\
+    \hat{\mathbf{s}}(\mathbf{y}_j) &= \mathbf{W}_{\text{var}} \begin{bmatrix} \mathbf{f}_j^{\text{out}} \\ \mathbf{W}_{\text{stats}} \mathbf{s}_j + \mathbf{b}_{\text{stats}} \end{bmatrix} + \mathbf{b}_{\text{var}} \in \mathbb{R}^{C_{\text{out}}}, \qquad \hat{\boldsymbol{\sigma}}^2(\mathbf{y}_j) = \exp\!\left(\hat{\mathbf{s}}(\mathbf{y}_j)\right) + 10^{-6}. \label{eq:bg_glu_var_head}
+\end{align}
+Conditioning the variance head explicitly on $\mathbf{s}_j = [\mu_{d,j}, \sigma_{d,j}, K_{\text{valid},j}, \mu_{\varphi,j}]^\top$ allows the network to express both \emph{state-dependent} aleatoric uncertainty (via $\mathbf{f}_j^{\text{out}}$) and \emph{geometry-dependent} sparsity uncertainty (increasing $\hat{\boldsymbol{\sigma}}^2(\mathbf{y}_j)$ in data voids where the mean distance $\mu_{d,j}$ to the nearest valid sensors is large).
+
+As summarized in the release training protocol (\texttt{training\_procedure\_pseudocode.tex} and \texttt{train.py}), Stage-0 optimizes all encoder, reconstructor, and spatial importance parameters end-to-end using AdamW with gradient clipping under the four-term composite loss:
+\begin{equation}
+    \mathcal{L}_{\text{Stage-0}} = \mathcal{L}_{\text{rec}} + \lambda_{\text{obs}} \mathcal{L}_{\text{obs}} + \lambda_{\text{nll}}(e)\, \mathcal{L}_{\text{nll}} + \lambda_{\text{elbo}}(e)\, \mathcal{L}_\varphi,
+    \label{eq:bg_glu_stage0_total}
+\end{equation}
+comprising:
+\begin{enumerate}
+    \item \textbf{Full-field reconstruction MSE ($\mathcal{L}_{\text{rec}}$):}
+    \begin{equation}
+        \mathcal{L}_{\text{rec}} = \sum_{c=1}^{C_{\text{out}}} w_c \, \frac{1}{P}\sum_{j=1}^P \left(\hat{u}^{(c)}(\mathbf{y}_j) - u^{(c)}(\mathbf{y}_j)\right)^2;
+        \label{eq:bg_glu_lrec}
+    \end{equation}
+    \item \textbf{Sensor-location consistency loss ($\mathcal{L}_{\text{obs}}$, enabled via \texttt{Supervise\_Sensors}):} evaluates the decoder directly at the observed sensor coordinates $\{\mathbf{x}_i\}_{i=1}^{N_s}$ to enforce self-consistency at measurement sites,
+    \begin{equation}
+        \mathcal{L}_{\text{obs}} = \sum_{c=1}^{C_{\text{out}}} w_c \, \frac{1}{N_s}\sum_{i=1}^{N_s} \left(\hat{u}^{(c)}(\mathbf{x}_i) - u^{(c)}(\mathbf{x}_i)\right)^2;
+        \label{eq:bg_glu_lobs}
+    \end{equation}
+    \item \textbf{Heteroscedastic Gaussian negative log-likelihood ($\mathcal{L}_{\text{nll}}$)~\cite{kendall2017uncertainties}:} with linearly annealed weight $\lambda_{\text{nll}}(e) = \lambda_{\text{nll},0} \min(1, e / E_{\text{anneal}})$ over the first $E_{\text{anneal}}$ epochs, plus a variance penalty driving predictive uncertainty toward zero at observed sensor sites $\mathbf{x}_i$,
+    \begin{equation}
+    \begin{aligned}
+        \mathcal{L}_{\text{nll}} &= \frac{1}{2 P C_{\text{out}}}\sum_{j=1}^P \sum_{c=1}^{C_{\text{out}}} \left[ \frac{\left(\hat{u}^{(c)}(\mathbf{y}_j) - u^{(c)}(\mathbf{y}_j)\right)^2}{\exp\!\left(\hat{s}^{(c)}(\mathbf{y}_j)\right) + 10^{-6}} + \hat{s}^{(c)}(\mathbf{y}_j) \right] \\
+        &\quad + \mathbb{I}_{\text{sens}} \frac{1}{N_s C_{\text{out}}}\sum_{i=1}^{N_s}\sum_{c=1}^{C_{\text{out}}} \left(\exp\!\left(\hat{s}^{(c)}(\mathbf{x}_i)\right) + 10^{-6}\right);
+    \end{aligned}
+    \label{eq:bg_glu_lnll}
+    \end{equation}
+    \item \textbf{Variational Beta importance loss ($\mathcal{L}_\varphi$):} given by Eq.~\eqref{eq:bg_glu_elbo_loss} with annealed weight $\lambda_{\text{elbo}}(e) = \lambda_{\text{elbo},0} \min(1, e / E_\varphi)$.
+\end{enumerate}
+
+\subsection{Structural Comparison: Original GLU Setup vs.\ Cross-Variable Multi-Condition Combustion Diagnostics}
+\label{subsec:bg_glu_comparison}
+
+In the original GLU paper~\cite{wang2026glu}, the turbulent combustion benchmark evaluated a two-dimensional OpenFOAM (\texttt{reactingFoam}) simulation of a premixed stoichiometric $\text{CH}_4/\text{air}$ flame stabilized behind a backward-facing step at a single fixed operating condition ($U_{\text{in}} = 20\text{ m/s}$, $T_{\text{in}} = 400\text{ K}$, $\phi = 1.0$). In that benchmark, sparse sensors covering $1\%$ of the domain simultaneously observed all three target channels $(\text{CO}, T, u_x)$ at every sensor location $\mathbf{x}_i$.\footnote{In the companion functional rectified-flow study (\textbf{DMF-Gen}~\cite{wang2026dmfgen}), the same single-condition backward-facing-step $\text{CH}_4/\text{air}$ dataset was also used to study missing-channel generation; however, in all three observation regimes tested in~\cite{wang2026dmfgen} ($T$ only, $T + u_x$, and $\text{CO} + T + u_x + p$), the temperature field $T$ was directly observed at $256$ sensor locations, whereas $\text{CH}_4$ mass fraction and pressure were the unmeasured targets.}
+
+When transitioning from that single-condition, co-located benchmark to the experimental diagnostic bottleneck of a three-dimensional swirl-stabilized $\text{NH}_3/\text{CH}_4$ combustor across 30 operating conditions (Table~\ref{tab:bg_glu_vs_thesis}), four structural differences arise that directly motivate the methodological adaptations developed in Chapter~\ref{ch:methodology}:
+
+\begin{table}[htbp]
+\centering
+\caption{Structural comparison between the original GLU turbulent combustion benchmark~\cite{wang2026glu} (and companion DMF-Gen setup~\cite{wang2026dmfgen}) and the cross-variable, multi-condition diagnostic problem investigated in this thesis.}
+\label{tab:bg_glu_vs_thesis}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lll}
+\toprule
+\textbf{Physical / Architectural Dimension} & \textbf{Original GLU Combustion Setup~\cite{wang2026glu}} & \textbf{This Thesis (\textit{RealPDEBench} Swirl Combustor)} \\
+\midrule
+Burner geometry \& flow physics & 2D backward-facing step (\texttt{reactingFoam}) & 2D diametral slice of 3D swirling LES combustor \\
+Fuel \& chemical kinetics & Single fuel: pure $\text{CH}_4/\text{air}$ ($\phi = 1.0$ fixed) & $\text{NH}_3/\text{CH}_4$ co-firing (38 species, 184 reactions) \\
+Operating-condition regime & 1 condition ($T_{\text{in}} = 400\text{ K}$, $U_{\text{in}} = 20\text{ m/s}$) & 30 conditions ($\text{NH}_3 \in [0, 80]\%$, $\phi \in [0.75, 1.30]$) \\
+Generalization protocol & Temporal split within the same operating point & Strict condition-level \texttt{val}, \texttt{test\_interp}, \texttt{test\_extrap} splits \\
+Observed sensor channels & Co-located $(\text{CO}, T, u_x)$ at all $N_s$ sensors & Track~1: $\mathbf{u}$ only ($K=0$); Track~2: $\mathbf{u}$ ($M_u$) $+$ sparse $T$ ($K \ll M_u$) \\
+Direct observations of target $T$ & $N_s \approx 160\text{--}400$ points ($1\%$ of domain) & Track~1: $K = 0$ (unobserved); Track~2: $K \in \{1, 4, 9, 16, 32\}$ \\
+Value token normalization & $\operatorname{RMSNorm}(\mathbf{W}_v \mathbf{u}_i + \mathbf{b}_v)$ across $(\text{CO}, T, u_x)$ & Scale-preserving MLP on $\mathbf{u}_i$ to preserve speed $|\mathbf{u}_i|$ \\
+Mean thermal level reference & Fixed global dataset standardization & Parametric prior $\hat{T}_{\text{param}}(\mathbf{x}; \mathbf{p})$ $+$ FiLM conditioning on $\mathbf{p}$ \\
+Spatial importance field $\varphi$ & Coordinate-only $\varphi(\mathbf{x})$ (single flame geometry) & Condition-aware $\varphi(\mathbf{x}, \mathbf{p})$ across shifting V-jet lengths \\
+Multi-rate sensor assimilation & Homogeneous co-located token set & Two-stage residual thermocouple assimilation ($e_k = T_k - \hat{T}_0(\mathbf{x}_k)$) \\
+\bottomrule
+\end{tabular}%
+}
+\end{table}
+
+\begin{enumerate}
+    \item \textbf{Cross-Variable Inference ($K = 0$) vs.\ Co-Located Interpolation:} In the original GLU setup, every sparse sensor directly observes $T(\mathbf{x}_i)$ alongside $\text{CO}(\mathbf{x}_i)$ and $u_x(\mathbf{x}_i)$, so the reconstructor performs coupled multi-channel spatial interpolation anchored by $\sim 160\text{--}400$ direct temperature measurements per frame. In Track~1 of our problem, $K = 0$: the target channel $T$ is completely absent from the input set $\mathcal{O}_u = \{(\mathbf{x}_m, \mathbf{u}_m)\}_{m=1}^{M_u}$, requiring the encoder and reconstructor to perform a nonlinear cross-variable operator mapping from sparse velocity vectors to temperature.
+    \item \textbf{Destruction of Velocity Magnitude by Zero-Bias \texttt{RMSNorm}:} Consider Eq.~\eqref{eq:bg_glu_eval} when the input at sensor $i$ consists solely of a two-component planar velocity vector $\mathbf{u}_i = (v_{i}, v_{j})^\top = |\mathbf{u}_i|\,\hat{\mathbf{d}}_i \in \mathbb{R}^2$ (with zero or negligible linear bias $\mathbf{b}_v$). Because $\mathbf{W}_v (|\mathbf{u}_i|\,\hat{\mathbf{d}}_i) = |\mathbf{u}_i| (\mathbf{W}_v \hat{\mathbf{d}}_i)$, applying $\operatorname{RMSNorm}$ in Eq.~\eqref{eq:bg_rmsnorm_def} divides by the Euclidean norm of $\mathbf{W}_v \mathbf{u}_i$:
+    \begin{equation}
+        \operatorname{RMSNorm}(\mathbf{W}_v \mathbf{u}_i) = \frac{\mathbf{g} \odot (|\mathbf{u}_i| \mathbf{W}_v \hat{\mathbf{d}}_i)}{\sqrt{\frac{1}{D}|\mathbf{u}_i|^2 \|\mathbf{W}_v \hat{\mathbf{d}}_i\|_2^2 + \epsilon_{\text{rms}}}} \approx \sqrt{D}\,\frac{\mathbf{g} \odot (\mathbf{W}_v \hat{\mathbf{d}}_i)}{\|\mathbf{W}_v \hat{\mathbf{d}}_i\|_2}.
+        \label{eq:bg_rmsnorm_scale_loss}
+    \end{equation}
+    As shown by Eq.~\eqref{eq:bg_rmsnorm_scale_loss}, normalizing each sensor's value projection independently projects out the local flow speed $|\mathbf{u}_i|$ and retains only the unit flow direction $\hat{\mathbf{d}}_i = \mathbf{u}_i / |\mathbf{u}_i|$. While acceptable when multi-channel thermodynamic quantities $(\text{CO}, T, u_x)$ are concatenated at each sensor, in velocity-only reconstruction $|\mathbf{u}_i|$ is the primary local indicator distinguishing high-speed cold reactant jets from low-speed hot recirculation zones. Preserving vector magnitude through an unnormalized multi-layer perceptron value embedding is therefore essential.
+    \item \textbf{Multi-Condition Thermodynamic Ambiguity and Condition-Dependent Flame Geometry:} Because original GLU was formulated for a single operating condition, neither the global leader token $\mathbf{z}_{\text{global}}$, nor the decoder readout, nor the coordinate-only Beta importance network $q_\psi(\varphi(\mathbf{x}) \mid \mathbf{x})$ depends on burner operating parameters $\mathbf{p} = (\text{NH}_3\%, \phi)$. Across our 30 operating conditions, however, both the adiabatic/mean temperature scale (shifting by $200\text{--}360\text{ K}$ at matched velocity) and the spatial penetration length of the V-shaped reactant jets vary systematically with $(\text{NH}_3\%, \phi)$. Generalizing across unseen interpolation and extrapolation mixtures therefore requires decomposing the target field into a parameter-conditioned mean prior $\hat{T}_{\text{param}}(\mathbf{x}; \mathbf{p})$ plus a residual fluctuation field, injecting $\mathbf{p}$ into the global latent and decoder pathways via Feature-wise Linear Modulation (FiLM~\cite{perez2018film}), and conditioning the importance field on $(\mathbf{x}, \mathbf{p})$.
+    \item \textbf{Extreme Cardinality Asymmetry in Thermocouple Assimilation ($M_u \gg K$):} Finally, in Track~2, when $K \in \{1, 4, 9\}$ sparse thermocouples are available alongside $M_u \sim 800\text{--}3200$ sparse PIV velocity measurements, pooling all sensors into a single homogeneous token bank causes the $M_u$ velocity tokens to dominate both the global cross-attention softmax in Eq.~\eqref{eq:bg_glu_enc_step1b} and the local $k$-NN neighborhood retrieval in Eq.~\eqref{eq:bg_glu_warped_distance}. This structural asymmetry motivates the two-stage residual assimilation architecture and the snapshot-conditioned low-rank correction basis developed in Chapter~\ref{ch:methodology}.
+\end{enumerate}
