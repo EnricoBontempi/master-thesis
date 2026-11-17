@@ -43,6 +43,15 @@ When the swirl number exceeds a critical threshold ($S_w \gtrsim 0.6$), the kine
     \item \textbf{Inner and Outer Shear Layers (ISL / OSL):} Along the interfaces separating the high-speed cold reactant jets from the low-speed hot recirculation zones (particularly the ISL bordering the IRZ), intense velocity shear ($\partial u_x / \partial r$) and azimuthal Kelvin--Helmholtz / precessing vortex core (PVC) instabilities roll up coherent vortical structures. These vortices corrugate the reaction sheet, producing the turbulent flame brush where local temperature standard deviations reach $\sigma_T \approx 300\text{--}500\text{ K}$.
 \end{enumerate}
 
+Figure~\ref{fig:bg_swirl_topology} illustrates these four zones directly on the time-averaged LES velocity and temperature fields of the stoichiometric methane flame (\texttt{0NH3\_1.h5}). In the exported coordinate convention of the dataset, positive axial velocity $\bar{v}_j > 0$ points in the downstream jet direction (toward $-x$ from the injector side at $x = +36.9\text{ mm}$), while $\bar{v}_j < 0$ inside the $\bar{v}_j = 0$ stagnation contour marks the reverse flow of the central Inner Recirculation Zone transporting hot products back toward the burner exit.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{fig_ch2_swirl_topology.png}
+    \caption[Time-averaged swirl topology and vortex breakdown in the LES combustor]{Time-averaged aerodynamics and thermal structure on the 2D diametral slice of the \texttt{0NH3\_1.h5} LES trajectory. (a)~Mean downstream axial velocity $\bar{v}_j$ (Ch~12) with in-plane streamlines $(-\bar{v}_j, \bar{v}_i)$ highlighting the diverging upper/lower annular V-jets, the central Inner Recirculation Zone (IRZ, $\bar{v}_j < 0$), and corner Outer Recirculation Zones (ORZ). (b)~Mean temperature $\bar{T}$ overlaid with the $\bar{v}_j = 0$ recirculation boundary (cyan dashed contour), showing flame stabilization along the inner shear layer.}
+    \label{fig:bg_swirl_topology}
+\end{figure}
+
 \subsection{Thermochemistry and Kinetics of \texorpdfstring{$\text{NH}_3/\text{CH}_4$}{NH3/CH4} Co-Firing}
 \label{subsec:bg_thermochem}
 
@@ -324,7 +333,40 @@ Consider a physical system observed at time $t$ through $N_s$ sparse sensors loc
     \mathcal{S}_t = \left\{\mathbf{z}_{\text{global}}^{(t)},\, \mathbf{Z}_{\text{local}}^{(t)}\right\}, \qquad \mathbf{z}_{\text{global}}^{(t)} \in \mathbb{R}^{1 \times D}, \qquad \mathbf{Z}_{\text{local}}^{(t)} = \left\{\mathbf{z}_i^{(t)}\right\}_{i=1}^{N_s} \in \mathbb{R}^{N_s \times D},
     \label{eq:bg_glu_latent_state}
 \end{equation}
-paired with a bounded spatial importance vector $\bar{\boldsymbol{\varphi}} = \left\{\bar{\varphi}(\mathbf{x}_i)\right\}_{i=1}^{N_s} \in (0, 1)^{N_s}$. Here, $\mathbf{z}_{\text{global}}^{(t)}$ is a single Leader (\texttt{cls\_token}) representation summarizing domain-wide organization, while $\mathbf{Z}_{\text{local}}^{(t)}$ are $N_s$ Follower tokens that remain one-to-one anchored to the physical sensor coordinates $\mathbf{x}_i$.
+paired with a bounded spatial importance vector $\bar{\boldsymbol{\varphi}} = \left\{\bar{\varphi}(\mathbf{x}_i)\right\}_{i=1}^{N_s} \in (0, 1)^{N_s}$. Here, $\mathbf{z}_{\text{global}}^{(t)}$ is a single Leader (\texttt{cls\_token}) representation summarizing domain-wide organization, while $\mathbf{Z}_{\text{local}}^{(t)}$ are $N_s$ Follower tokens that remain one-to-one anchored to the physical sensor coordinates $\mathbf{x}_i$. An architectural overview of this Stage-0 spatial reconstruction pipeline is shown in Figure~\ref{fig:bg_glu_arch}.
+
+\begin{figure}[H]
+    \centering
+    \resizebox{\textwidth}{!}{%
+    \begin{tikzpicture}[
+        node distance=0.55cm and 0.65cm,
+        box/.style={draw=bluepoli!80!black, rounded corners=3pt, fill=bluepoli!6, text width=3.1cm, align=center, minimum height=1.05cm, font=\footnotesize},
+        widebox/.style={draw=bluepoli!80!black, rounded corners=3pt, fill=bluepoli!10, text width=3.7cm, align=center, minimum height=1.1cm, font=\footnotesize},
+        impbox/.style={draw=orange!70!black, rounded corners=3pt, fill=orange!10, text width=2.8cm, align=center, minimum height=0.95cm, font=\footnotesize},
+        headbox/.style={draw=teal!70!black, rounded corners=3pt, fill=teal!10, text width=2.7cm, align=center, minimum height=0.9cm, font=\footnotesize},
+        arr/.style={-{Stealth[length=2.2mm]}, thick, draw=black!75}
+    ]
+        \node[box] (inp) {\textbf{Sparse Sensors}\\$\{(\mathbf{x}_i, \mathbf{u}_i)\}_{i=1}^{N_s}$\\Fourier + \texttt{RMSNorm}};
+        \node[widebox, right=of inp] (enc) {\textbf{Bidirectional Encoder}\\\texttt{DomainAdaptiveEncoder}\\$\text{Sensors} \leftrightarrow L\text{ Latents} + \texttt{CLS}$};
+        \node[widebox, right=of enc] (dec) {\textbf{Adaptive $k$-NN + Fusion}\\$d_\varphi(\mathbf{y}, \mathbf{x}_i)$ top-$k$ retrieval\\+\, \texttt{SpatiallyAwareCLSFusion}};
+        \node[headbox, above right=0.15cm and 0.65cm of dec] (mean) {\textbf{Mean Head}\\$\hat{\mathbf{u}}(\mathbf{y}_j)$\\($\mathcal{L}_{\text{rec}}$ MSE)};
+        \node[headbox, below right=0.15cm and 0.65cm of dec] (var) {\textbf{Variance Head}\\$\log\hat{\sigma}^2(\mathbf{y}_j)$\\($\mathcal{L}_{\text{nll}}$ Heteroscedastic)};
+        \node[impbox, below=0.65cm of enc] (phi) {\textbf{Beta Importance}\\\texttt{phi\_mlp\_1}$(\mathbf{x}_i)$\\$\bar{\varphi}_i = \frac{\alpha_i}{\alpha_i+\beta_i} \in (0,1)$};
+        \node[box, below=0.60cm of dec, fill=gray!8, draw=gray!60!black] (qry) {\textbf{Query Coords}\\$\mathbf{Y} = \{\mathbf{y}_j\}_{j=1}^{P}$\\Fourier + \texttt{RMSNorm}};
+
+        \draw[arr] (inp) -- node[above, font=\scriptsize] {$\mathbf{H}$} (enc);
+        \draw[arr] (enc) -- node[above, font=\scriptsize] {$\mathbf{z}_{\text{global}}, \mathbf{Z}_{\text{local}}$} (dec);
+        \draw[arr] (dec.east) -- (mean.west);
+        \draw[arr] (dec.east) -- (var.west);
+        \draw[arr] (inp.south) |- (phi.west);
+        \draw[arr] (phi.east) -| node[pos=0.25, below, font=\scriptsize] {warps $d_\varphi$} (dec.south west);
+        \draw[arr] (qry) -- (dec);
+        \draw[arr, dashed, draw=orange!70!black] (var.south) |- ++(0,-1.35) -| node[pos=0.22, below, font=\scriptsize] {normalized uncertainty target $U(\mathbf{y})$ ($\mathcal{L}_\varphi$)} (phi.south);
+    \end{tikzpicture}%
+    }
+    \caption[Stage-0 architectural diagram of the Global-Local-Uncertainty (GLU) framework]{Block diagram of the Stage-0 spatial reconstruction pipeline in \textit{GLU}~\cite{wang2026glu}, following \texttt{external/GLU\_Reconstruction/src/models.py} and \texttt{training\_procedure\_pseudocode.tex}. Dashed lines indicate self-supervised variational training of the coordinate-only Beta importance field $\varphi(\mathbf{x})$ from the normalized predictive variance $U(\mathbf{y})$.}
+    \label{fig:bg_glu_arch}
+\end{figure}
 
 To lift each sparse observation $(\mathbf{x}_i, \mathbf{u}_i)$ into the embedding space $\mathbb{R}^D$ while preserving high-frequency spatial sensitivity, GLU first applies a learnable Gaussian Fourier feature mapping~\cite{tancik2020fourier} (\texttt{FourierEmbedding}):
 \begin{equation}

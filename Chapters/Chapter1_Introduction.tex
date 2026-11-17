@@ -41,11 +41,18 @@ At first glance, inferring temperature from velocity alone may appear physically
     \item \textbf{Instantaneous turbulent flame-brush ambiguity:} While time-averaged temperature fields vary smoothly with $(\text{NH}_3\%, \phi)$, instantaneous turbulent snapshots exhibit intense vortex shedding and flame-front wrinkling ($\sigma_T \approx 300\text{--}500\text{ K}$ along the jet shear layers). Linear modal estimators such as Gappy Proper Orthogonal Decomposition (Gappy POD)~\cite{everson1995karhunen} capture the large-scale mean structure but struggle to infer the nonlinear phase and position of the wrinkled reaction front from sparse velocity vectors.
 \end{enumerate}
 
-To study both sources of ambiguity systematically without conflating them, this thesis separates the reconstruction problem into two distinct operational tracks:
+To study both sources of ambiguity systematically without conflating them, this thesis separates the reconstruction problem into two distinct operational tracks (illustrated in Figure~\ref{fig:intro_diagnostic_task}):
 \begin{itemize}
     \item \textbf{Track 1 --- Temperature-Free Reconstruction ($\mathcal{O}_u \rightarrow T$):} At inference time, no temperature sensors are available ($K = 0$). The model observes only sparse velocity vectors $\mathcal{O}_u = \{(\mathbf{x}_m, \mathbf{u}(\mathbf{x}_m, t))\}_{m=1}^{M_u}$ on the 2D plane, either without operating metadata (\emph{unconditioned}) or conditioned on the known burner operating parameters $\mathbf{p} = (\text{NH}_3\%, \phi)$ (\emph{parameter-conditioned}).
     \item \textbf{Track 2 --- Temperature-Assisted Reconstruction ($\mathcal{O}_u \cup \mathcal{O}_T \rightarrow T$):} In addition to sparse velocity $\mathcal{O}_u$ (and optional $\mathbf{p}$), the model observes $K \in \{1, 4, 9, 16, 32\}$ sparse point temperature measurements $\mathcal{O}_T = \{(\mathbf{x}_k, T(\mathbf{x}_k, t))\}_{k=1}^K$, mimicking a small array of physical thermocouples.
 \end{itemize}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{fig_ch1_diagnostic_problem.png}
+    \caption[Cross-variable temperature reconstruction problem formulation]{Schematic overview of the inverse diagnostic problem on a representative LES snapshot (\texttt{0NH3\_1.h5}, $t = 3.75\text{ s}$). (a)~Available sparse 2-component PIV velocity vectors ($5\%$ spatial coverage, $819$ observed sites without zero-filling) and optional $K=9$ point temperature probes. (b)~Parallel conditioning on sparse velocity tokens $\mathcal{O}_u$, operating state $\mathbf{p} = (\text{NH}_3\%, \phi)$, and optional probes $\mathcal{O}_T$. (c)~Target instantaneous planar temperature field $T(\mathbf{x}, t)$ exhibiting cold unburnt reactant V-jets ($300\text{--}400\text{ K}$) entering from the right boundary around a hot central Inner Recirculation Zone (IRZ, $\sim 2200\text{ K}$).}
+    \label{fig:intro_diagnostic_task}
+\end{figure}
 
 Within this framework, the thesis addresses four specific scientific questions:
 \begin{enumerate}
